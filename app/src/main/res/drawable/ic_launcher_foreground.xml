@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Tragegriff -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:pathData="M44,42 L44,38 A10,10 0 0 1 64,38 L64,42" />
+    <!-- Tasche -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,42 L74,42 L71,76 A4,4 0 0 1 67,80 L41,80 A4,4 0 0 1 37,76 Z" />
+    <!-- Download-Pfeil -->
+    <path
+        android:fillColor="#3F51B5"
+        android:pathData="M51,50 L57,50 L57,61 L63,61 L54,71 L45,61 L51,61 Z" />
+</vector>
