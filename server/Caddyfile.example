@@ -1,0 +1,38 @@
+# ByteDroide-Store hinter Caddy.
+# Voraussetzung: Caddy und der Container "bytedroide" hängen beide im Docker-Netzwerk "reverse-proxy".
+# Diesen Block in dein bestehendes Caddyfile übernehmen und Caddy neu laden:
+#   docker exec -w /etc/caddy caddy caddy reload
+
+apps.nebendahl.eu {
+	# HTTPS-Zertifikat holt Caddy automatisch (Let's Encrypt)
+
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	# APK-Uploads bis 200 MB (passend zu MAX_UPLOAD_MB in der .env)
+	request_body {
+		max_size 210MB
+	}
+
+	reverse_proxy bytedroide:8080 {
+		# Große Uploads/Downloads nicht abbrechen
+		transport http {
+			read_timeout 10m
+			write_timeout 10m
+		}
+		health_uri /healthz
+		health_interval 30s
+	}
+
+	log {
+		output file /data/logs/apps.nebendahl.eu.log {
+			roll_keep_for 336h
+		}
+	}
+}

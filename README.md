@@ -88,8 +88,14 @@ cp .env.example .env      # Betreiberdaten, SMTP, Forgejo-Token, optional Stripe
 docker compose up -d --build
 ```
 
-Der Server läuft auf Port `8080`. Die App erwartet ihn fest unter **`https://apps.nebendahl.eu`** – im Reverse-Proxy
-`apps.nebendahl.eu` → `http://localhost:8080` eintragen und `TRUST_PROXY=1` setzen.
+Der Container hängt im externen Docker-Netzwerk **`reverse-proxy`** (ohne veröffentlichten Port) und ist dort für
+Caddy unter `http://bytedroide:8080` erreichbar. Falls das Netzwerk noch nicht existiert:
+`docker network create reverse-proxy` (Caddy muss ebenfalls darin hängen).
+
+Caddy-Konfiguration für **`https://apps.nebendahl.eu`** (fest in der App eingebaut): siehe
+[`server/Caddyfile.example`](server/Caddyfile.example) – Block ins eigene Caddyfile übernehmen und Caddy neu laden.
+Sie erlaubt APK-Uploads bis 210 MB, lange Up-/Downloads und behält Zugriffsprotokolle 14 Tage (wie in der
+Datenschutzerklärung angegeben).
 
 **Erste Schritte:** App installieren → Konto → Registrieren. Das **erste Konto wird automatisch Admin.**
 
@@ -110,7 +116,7 @@ Eine bestehende Datenbank aus Version 1.x wird beim Start automatisch übernomme
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CURRENCY` | Bezahlung (Webhook: `https://…/api/stripe/webhook`) |
 | `MAX_UPLOAD_MB` | maximale APK-Größe (Standard 200) |
 | `STORE_APP_ID` | App, die unter `/download` angeboten wird (z. B. ByteDroide selbst) |
-| `TRUST_PROXY` | `1` hinter Reverse-Proxy |
+| `TRUST_PROXY` | `1` hinter Reverse-Proxy (in `docker-compose.yml` bereits gesetzt) |
 
 Ohne Docker: `cd server && python3 store_server.py`
 

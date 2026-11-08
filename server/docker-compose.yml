@@ -4,7 +4,18 @@ services:
     container_name: bytedroide
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8080:8080"
+    environment:
+      # Caddy sitzt davor und liefert die echte Client-IP in X-Forwarded-For
+      TRUST_PROXY: "1"
+    # Kein Port nach außen: Caddy erreicht den Container über das Netzwerk "reverse-proxy"
+    # unter http://bytedroide:8080. Zum lokalen Testen ggf. wieder einkommentieren:
+    # ports:
+    #   - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/data
+    networks:
+      - reverse-proxy
+
+networks:
+  reverse-proxy:
+    external: true
