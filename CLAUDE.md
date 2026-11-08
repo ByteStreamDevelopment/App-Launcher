@@ -21,9 +21,12 @@
   (14 Tage, Eingangsbestätigung per Mail), Erstattung durch Admin.
 - **Mails**: SMTP über `SMTP_*`; ohne `SMTP_HOST` nur Log. **Rechtstexte**: `/impressum`, `/datenschutz`, `/agb`,
   `/widerruf`, Betreiberdaten aus `OPERATOR_*` (fehlende werden rot markiert). Nutzer muss echte Daten in `.env` eintragen.
-- **Server testen**: `python3 -m unittest discover -s server/tests` (38 Tests, Fake-Forgejo/GitHub/Mailer/Stripe, ~20 s).
+- **Server testen**: `python3 -m unittest discover -s server/tests` (41 Tests, Fake-Forgejo/GitHub/Mailer/Stripe, ~20 s).
+  CLI im Container: `python store_server.py users | set-role NAME ROLLE | reset-password NAME`.
 - **App testen**: `./gradlew assembleDebug testDebugUnitTest` (Versionsvergleich + `ApiContractTest` mit echten
   Server-Antworten aus `app/src/test/resources/api-samples.json`; bei API-Änderungen neu erzeugen).
+- **Releases**: `.github/workflows/release.yml` bzw. `.forgejo/workflows/release.yml` bauen bei veröffentlichtem
+  Release eine signierte APK (Keystore aus Secrets), Version per `scripts/version-from-tag.sh`, Upload in den Store.
 - **GitHub-Repo**: `bytestreamdevelopment/app-launcher`.
 - **App-Technik**: Kotlin, Jetpack Compose (Material 3), minSdk 26, targetSdk/compileSdk 35, AGP 8.7.3,
   Kotlin 2.0.21, Gradle-Wrapper 8.11.1, JDK 17. Keine Netzwerk-Bibliothek (HttpURLConnection + org.json), Coil für Bilder,
