@@ -1,7 +1,7 @@
 services:
-  app-store:
+  bytedroide:
     build: .
-    container_name: app-store
+    container_name: bytedroide
     restart: unless-stopped
     env_file: .env
     ports:

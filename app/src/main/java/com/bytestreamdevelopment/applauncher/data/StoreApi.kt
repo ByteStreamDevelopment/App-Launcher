@@ -135,7 +135,7 @@ class StoreApi(baseUrl: String, private val token: String?) {
         conn.connectTimeout = 15_000
         conn.readTimeout = 60_000
         conn.setRequestProperty("Accept", "application/json")
-        conn.setRequestProperty("User-Agent", "App-Launcher-Store")
+        conn.setRequestProperty("User-Agent", "ByteDroide")
         if (!token.isNullOrBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
         return conn
     }

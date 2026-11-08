@@ -51,7 +51,7 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("App Store") },
+                title = { Text("ByteDroide") },
                 actions = {
                     if (state.user?.isAdmin == true) {
                         IconButton(onClick = { vm.navigate(Screen.Admin) }) { Icon(Icons.Default.Build, "Admin-Bereich") }

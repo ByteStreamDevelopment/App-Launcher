@@ -1,6 +1,7 @@
 # Projektnotizen für Claude
 
 - **Sprache**: Mit dem Nutzer immer auf Deutsch kommunizieren. UI-Texte der App sind deutsch.
+- **Name**: **ByteDroide** (Anzeigename; Paketname bleibt `com.bytestreamdevelopment.applauncher`, Repo heißt App-Launcher).
 - **Zweck**: Android-App-Store für selbst gebaute Apps des Nutzers.
 - **Quelle**: Forgejo-Server `https://git.nebendahl.eu` (Forgejo 16 / Gitea-1.22-kompatible API v1).
   Es zählt immer das **neueste Release** (`/releases/latest`) eines Repos; Repos ohne `.apk`-Anhang werden ignoriert.

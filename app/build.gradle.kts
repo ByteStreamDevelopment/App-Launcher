@@ -21,8 +21,8 @@ android {
         applicationId = "com.bytestreamdevelopment.applauncher"
         minSdk = 26
         targetSdk = 35
-        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 2
-        versionName = (project.findProperty("appVersionName") as String?) ?: "1.1.0"
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 3
+        versionName = (project.findProperty("appVersionName") as String?) ?: "1.2.0"
         // Vorbelegte Store-Server-Adresse, z. B. ./gradlew assembleRelease -PstoreServerUrl=https://store.example.de
         val storeServerUrl = (project.findProperty("storeServerUrl") as String?) ?: ""
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"$storeServerUrl\"")

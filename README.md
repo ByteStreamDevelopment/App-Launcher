@@ -1,6 +1,6 @@
-# App Store (App-Launcher)
+# ByteDroide
 
-Ein eigener kleiner App Store für Android, der deine selbst gebauten Apps von deinem
+ByteDroide ist ein eigener kleiner App Store für Android, der deine selbst gebauten Apps von deinem
 Forgejo-Server (**https://git.nebendahl.eu**) installiert und aktuell hält – mit Admin-Bereich,
 Einmal-Codes und Benutzerverwaltung.
 

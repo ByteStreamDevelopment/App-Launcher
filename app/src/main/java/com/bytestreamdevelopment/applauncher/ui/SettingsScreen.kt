@@ -71,7 +71,7 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
                 label = { Text("Server-Adresse") },
                 placeholder = { Text("https://store.example.de") },
                 supportingText = {
-                    Text("Adresse des App-Store-Servers (nicht Forgejo selbst). Welche Apps es gibt, legt der Admin dort fest.")
+                    Text("Adresse des ByteDroide-Servers (nicht Forgejo selbst). Welche Apps es gibt, legt der Admin dort fest.")
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
@@ -100,7 +100,7 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
             HorizontalDivider()
             Text("Berechtigungen", style = MaterialTheme.typography.titleMedium)
             Text(
-                "Damit der Store Apps installieren darf, muss „Unbekannte Apps installieren“ für ihn erlaubt sein.",
+                "Damit ByteDroide Apps installieren darf, muss „Unbekannte Apps installieren“ dafür erlaubt sein.",
                 style = MaterialTheme.typography.bodyMedium,
             )
             OutlinedButton(onClick = vm::openInstallPermissionSettings, modifier = Modifier.fillMaxWidth()) {
@@ -109,7 +109,7 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
 
             HorizontalDivider()
             Text(
-                "App Store ${BuildConfig.VERSION_NAME}",
+                "ByteDroide ${BuildConfig.VERSION_NAME}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

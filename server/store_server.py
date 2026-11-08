@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""App-Store-Server.
+"""ByteDroide-Server (App Store).
 
 Sitzt zwischen der Android-App und Forgejo:
 - liest die Apps (neuestes Release mit .apk) von Forgejo, auch aus privaten Repos (per Token)
@@ -183,7 +183,7 @@ class Catalog:
         self.last_error = None
 
     def _headers(self) -> dict:
-        h = {"Accept": "application/json", "User-Agent": "App-Launcher-Store-Server"}
+        h = {"Accept": "application/json", "User-Agent": "ByteDroide-Server"}
         if self.config.forgejo_token:
             h["Authorization"] = f"token {self.config.forgejo_token}"
         return h
@@ -595,7 +595,7 @@ def app_id(params) -> str:
 class Handler(BaseHTTPRequestHandler):
     store: Store = None  # wird in make_server gesetzt
     protocol_version = "HTTP/1.1"
-    server_version = "AppStoreServer/1.0"
+    server_version = "ByteDroideServer/1.0"
 
     def log_message(self, fmt, *args):
         log.info("%s %s", self.client_ip(), fmt % args)
@@ -791,7 +791,7 @@ def main():
     if not config.forgejo_token:
         log.warning("FORGEJO_TOKEN ist nicht gesetzt – nur öffentliche Repos sind sichtbar.")
     server = make_server(config)
-    log.info("App-Store-Server läuft auf %s:%s (Forgejo: %s)", config.host, config.port, config.forgejo_url)
+    log.info("ByteDroide-Server läuft auf %s:%s (Forgejo: %s)", config.host, config.port, config.forgejo_url)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

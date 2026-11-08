@@ -99,7 +99,7 @@ class MainActivity : ComponentActivity() {
                         title = { Text("Berechtigung nötig") },
                         text = {
                             Text(
-                                "Erlaube dem App Store, unbekannte Apps zu installieren. " +
+                                "Erlaube ByteDroide, unbekannte Apps zu installieren. " +
                                     "Danach zurückkehren und erneut tippen.",
                             )
                         },

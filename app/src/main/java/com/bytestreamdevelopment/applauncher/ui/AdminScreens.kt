@@ -385,7 +385,7 @@ private fun CodeRow(code: AccessCode, fresh: Boolean, appName: String, onDelete:
             if (!used) {
                 IconButton(onClick = {
                     val text = "Dein Freischalt-Code für $appName: ${code.code}\n" +
-                        "Im App Store: Konto → „Freischalt-Code einlösen“."
+                        "In ByteDroide: Konto → „Freischalt-Code einlösen“."
                     val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
                     context.startActivity(Intent.createChooser(send, "Code teilen"))
                 }) { Icon(Icons.Default.Share, "Teilen") }
