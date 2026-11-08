@@ -13,7 +13,7 @@ data class CatalogResult(val apps: List<StoreApp>, val user: UserInfo?)
 /** Lädt den App-Katalog vom Store-Server und ermittelt den Installationsstatus. */
 class Catalog(private val context: Context, private val settings: StoreSettings) {
 
-    fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null })
+    fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null }, settings.installId)
 
     suspend fun load(): CatalogResult = withContext(Dispatchers.IO) {
         val (raw, user) = api().apps()
@@ -85,6 +85,11 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
                 review = o.optString("review", "approved"),
                 canManage = o.optBoolean("can_manage"),
                 packageName = if (o.isNull("package")) null else o.optString("package").ifBlank { null },
+                ratingAverage = o.optJSONObject("rating")?.optDouble("average", 0.0) ?: 0.0,
+                ratingCount = o.optJSONObject("rating")?.optInt("count") ?: 0,
+                screenshots = (o.optJSONArray("screenshots") ?: JSONArray()).let { a ->
+                    (0 until a.length()).map(a::getString)
+                },
             )
         }
 

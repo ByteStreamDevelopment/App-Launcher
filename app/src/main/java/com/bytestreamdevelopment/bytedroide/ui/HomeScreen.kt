@@ -212,11 +212,20 @@ private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Text(
-                statusText(entry, task),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    statusText(entry, task),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (entry.app.ratingCount > 0) {
+                    Text(
+                        "★ %.1f".format(entry.app.ratingAverage),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
         }
         Spacer(Modifier.width(8.dp))
         ActionButton(entry, task, vm)

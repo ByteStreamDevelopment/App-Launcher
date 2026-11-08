@@ -39,7 +39,12 @@
     },
     "review": "approved",
     "can_manage": false,
-    "package": null
+    "package": null,
+    "rating": {
+     "average": 0,
+     "count": 0
+    },
+    "screenshots": []
    },
    {
     "id": "Manhunt/manhunt",
@@ -79,7 +84,12 @@
     },
     "review": "approved",
     "can_manage": false,
-    "package": null
+    "package": null,
+    "rating": {
+     "average": 0,
+     "count": 0
+    },
+    "screenshots": []
    },
    {
     "id": "anna/spiel",
@@ -95,7 +105,7 @@
      "tag": "1.1.0-beta",
      "name": "1.1.0-beta",
      "notes": "",
-     "published_at": "2026-11-08T21:00:22Z",
+     "published_at": "2026-11-08T22:02:41Z",
      "html_url": "",
      "channel": "beta"
     },
@@ -119,7 +129,14 @@
     },
     "review": "approved",
     "can_manage": false,
-    "package": "com.anna.spiel"
+    "package": "com.anna.spiel",
+    "rating": {
+     "average": 4.0,
+     "count": 1
+    },
+    "screenshots": [
+     "https://store.test/api/apps/anna/spiel/screenshots/1"
+    ]
    }
   ],
   "user": {
@@ -132,7 +149,8 @@
    "is_developer": false,
    "dev_requested": false,
    "notify_updates": true,
-   "notify_news": false
+   "notify_news": false,
+   "ntfy_topic": ""
   }
  },
  "devapp": {
@@ -155,9 +173,9 @@
   "stable": "1.0.0",
   "beta_version": "1.1.0-beta",
   "source_error": null,
-  "downloads": 0,
-  "downloads_30d": 0,
-  "download_users": 0,
+  "downloads": 1,
+  "downloads_30d": 1,
+  "download_users": 1,
   "sales": 1,
   "revenue_cents": 199,
   "currency": "eur",
@@ -165,7 +183,20 @@
   "codes_used": 0,
   "testers": 1,
   "unlocked_users": 1,
-  "created_at": 1794171622
+  "created_at": 1794175361,
+  "pending_versions": [],
+  "blocked_versions": [],
+  "screenshots": [
+   {
+    "id": 1,
+    "url": "https://store.test/api/apps/anna/spiel/screenshots/1"
+   }
+  ],
+  "rating": {
+   "average": 4.0,
+   "count": 1
+  },
+  "review_releases": false
  },
  "me": {
   "user": {
@@ -178,7 +209,8 @@
    "is_developer": true,
    "dev_requested": false,
    "notify_updates": true,
-   "notify_news": false
+   "notify_news": false,
+   "ntfy_topic": ""
   }
  },
  "purchases": {
@@ -190,7 +222,7 @@
     "amount_cents": 199,
     "price": "1,99 €",
     "status": "paid",
-    "created_at": 1794171622,
+    "created_at": 1794175361,
     "withdrawn_at": null,
     "can_withdraw": true
    }
@@ -209,7 +241,8 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794171621,
+    "ntfy_topic": "",
+    "created_at": 1794175361,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -226,7 +259,8 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794171622,
+    "ntfy_topic": "",
+    "created_at": 1794175361,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 1,
@@ -243,7 +277,8 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794171622,
+    "ntfy_topic": "",
+    "created_at": 1794175361,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -263,7 +298,7 @@
   "dev_requests": 0,
   "apps": 3,
   "apps_pending": 0,
-  "downloads_30d": 0,
+  "downloads_30d": 1,
   "revenue_cents": 199,
   "withdrawals_open": 0,
   "mail_enabled": true,
@@ -273,6 +308,49 @@
    "OPERATOR_STREET",
    "OPERATOR_CITY",
    "OPERATOR_EMAIL"
-  ]
+  ],
+  "releases_pending": 0,
+  "review_releases": false,
+  "scanner_enabled": false,
+  "push_enabled": true
+ },
+ "reviews": {
+  "average": 4.0,
+  "count": 1,
+  "distribution": [
+   0,
+   1,
+   0,
+   0,
+   0
+  ],
+  "reviews": [
+   {
+    "user_id": 3,
+    "username": "bert",
+    "rating": 4,
+    "text": "Gut",
+    "version": "1.1.0-beta",
+    "created_at": 1794175361,
+    "updated_at": 1794175361,
+    "reply": "",
+    "reply_at": null,
+    "mine": true
+   }
+  ],
+  "can_review": true,
+  "can_reply": false,
+  "mine": {
+   "user_id": 3,
+   "username": "bert",
+   "rating": 4,
+   "text": "Gut",
+   "version": "1.1.0-beta",
+   "created_at": 1794175361,
+   "updated_at": 1794175361,
+   "reply": "",
+   "reply_at": null,
+   "mine": true
+  }
  }
 }

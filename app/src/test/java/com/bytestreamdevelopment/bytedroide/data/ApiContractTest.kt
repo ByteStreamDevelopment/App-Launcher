@@ -36,6 +36,10 @@ class ApiContractTest {
         assertTrue(app.release.apk.name.endsWith(".apk"))
         assertTrue(app.release.apk.size > 0)
         assertEquals("com.anna.spiel", app.packageName)
+        assertEquals(1, app.ratingCount)
+        assertEquals(4.0, app.ratingAverage, 0.01)
+        assertEquals(1, app.screenshots.size)
+        assertTrue(app.screenshots[0].contains("/screenshots/"))
     }
 
     @Test
@@ -77,6 +81,24 @@ class ApiContractTest {
         assertEquals("paid", p.getString("status"))
         assertTrue(p.getBoolean("can_withdraw"))
         assertEquals("1,99 €", p.getString("price"))
+    }
+
+    @Test
+    fun bewertungen() {
+        val list = StoreApi.parseReviews(samples.getJSONObject("reviews"))
+        assertEquals(1, list.count)
+        assertEquals(listOf(0, 1, 0, 0, 0), list.distribution)
+        assertEquals("Gut", list.mine?.text)
+        assertTrue(list.canReview)
+        assertFalse(list.canReply)
+    }
+
+    @Test
+    fun entwicklerAppNeueFelder() {
+        val app = StoreApi.parseDevApp(samples.getJSONObject("devapp"))
+        assertEquals(1, app.screenshots.size)
+        assertEquals(1, app.ratingCount)
+        assertTrue(app.pendingVersions.isEmpty())
     }
 
     @Test

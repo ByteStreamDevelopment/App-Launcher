@@ -5,6 +5,10 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -63,6 +67,8 @@ import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 import com.bytestreamdevelopment.bytedroide.data.UserInfo
 import com.bytestreamdevelopment.bytedroide.data.formatCents
 import org.json.JSONObject
+
+val ROLLOUT_STEPS = listOf(10, 25, 50, 100)
 
 // ---------------------------------------------------------------------------
 // Übersicht: meine Apps
@@ -257,6 +263,10 @@ fun DevAppScreen(fullName: String, me: UserInfo?, dev: DevViewModel, vm: StoreVi
     var confirmDelete by remember { mutableStateOf(false) }
     var rejectDialog by remember { mutableStateOf(false) }
     var testerDialog by remember { mutableStateOf(false) }
+    var rolloutFor by remember { mutableStateOf<com.bytestreamdevelopment.bytedroide.data.DevRelease?>(null) }
+    val shotPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) dev.addScreenshot(fullName, uri)
+    }
 
     Scaffold(
         topBar = {
@@ -304,11 +314,26 @@ fun DevAppScreen(fullName: String, me: UserInfo?, dev: DevViewModel, vm: StoreVi
                         val context = LocalContext.current
                         Card(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Column(Modifier.weight(1f)) {
+                                Column(Modifier.weight(1f).clickable(enabled = r.channel == "stable" && r.status == "approved") {
+                                    rolloutFor = r
+                                }) {
                                     Text(version(r.version) + if (r.channel == "beta") " (Beta)" else "",
                                         style = MaterialTheme.typography.titleSmall)
                                     Hint("Code ${r.versionCode ?: "?"} · ${Formatter.formatShortFileSize(context, r.size)} · " +
                                         formatEpoch(r.createdAt))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        when (r.status) {
+                                            "pending" -> Badge("Wartet auf Prüfung", MaterialTheme.colorScheme.tertiary)
+                                            "rejected" -> Badge("Abgelehnt", MaterialTheme.colorScheme.error)
+                                        }
+                                        if (r.channel == "stable" && r.status == "approved" && r.rollout < 100) {
+                                            Badge("Rollout ${r.rollout} % · tippen zum Ändern", MaterialTheme.colorScheme.primary)
+                                        }
+                                        if (r.scan == "clean") Badge("Virenscan ✓", MaterialTheme.colorScheme.secondary)
+                                    }
+                                    if (r.status == "rejected" && r.reviewNote.isNotBlank()) {
+                                        Hint("Begründung: ${r.reviewNote}", MaterialTheme.colorScheme.error)
+                                    }
                                 }
                                 IconButton(onClick = { dev.deleteRelease(fullName, r) }) {
                                     Icon(Icons.Default.Delete, "Version löschen")
@@ -325,11 +350,47 @@ fun DevAppScreen(fullName: String, me: UserInfo?, dev: DevViewModel, vm: StoreVi
                             Text(app.sourceUrl, style = MaterialTheme.typography.bodySmall)
                             Hint("Neue Versionen: dort ein Release mit .apk anlegen. Pre-Releases werden zur Beta.")
                             app.sourceError?.let { Hint("Fehler: $it", MaterialTheme.colorScheme.error) }
+                            if (app.pendingVersions.isNotEmpty()) {
+                                Hint("Wartet auf Admin-Prüfung: ${app.pendingVersions.joinToString()}",
+                                    MaterialTheme.colorScheme.tertiary)
+                            }
+                            if (app.blockedVersions.isNotEmpty()) {
+                                Hint("Gesperrt (abgelehnt oder Virenfund): ${app.blockedVersions.joinToString()}",
+                                    MaterialTheme.colorScheme.error)
+                            }
                         }
                     }
                 }
             }
 
+            item { HorizontalDivider() }
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionTitle("Screenshots (${app.screenshots.size}/8)")
+                        Spacer(Modifier.weight(1f))
+                        TextButton(onClick = { shotPicker.launch("image/*") }, enabled = app.screenshots.size < 8) {
+                            Text("Hinzufügen")
+                        }
+                    }
+                    if (app.screenshots.isEmpty()) Hint("Screenshots erscheinen auf der App-Seite in ByteDroide und im Web-Store.")
+                    androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(app.screenshots, key = { it.id }) { shot ->
+                            Box {
+                                coil.compose.AsyncImage(
+                                    model = shot.url,
+                                    contentDescription = null,
+                                    modifier = Modifier.height(160.dp).clip(RoundedCornerShape(10.dp)),
+                                )
+                                IconButton(
+                                    onClick = { dev.deleteScreenshot(fullName, shot.id) },
+                                    modifier = Modifier.align(Alignment.TopEnd),
+                                ) { Icon(Icons.Default.Delete, "Screenshot löschen") }
+                            }
+                        }
+                    }
+                }
+            }
             item { HorizontalDivider() }
             item { SettingsCard(app, dev) }
 
@@ -392,6 +453,27 @@ fun DevAppScreen(fullName: String, me: UserInfo?, dev: DevViewModel, vm: StoreVi
             onDismiss = { rejectDialog = false },
         )
     }
+    rolloutFor?.let { r ->
+        var value by remember { mutableStateOf(r.rollout) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { rolloutFor = null },
+            title = { Text("Rollout von ${version(r.version)}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Wie viel Prozent der Nutzer sollen diese Version bekommen? Die anderen behalten die vorherige.")
+                    ChoiceChips(ROLLOUT_STEPS, value, { "$it %" }) { value = it }
+                    Hint("Bei 100 % bekommen alle das Update und eine Benachrichtigung.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    dev.setRollout(fullName, r, value)
+                    rolloutFor = null
+                }) { Text("Übernehmen") }
+            },
+            dismissButton = { TextButton(onClick = { rolloutFor = null }) { Text("Abbrechen") } },
+        )
+    }
     if (testerDialog) {
         InputDialog(
             title = "Beta-Tester einladen",
@@ -433,9 +515,10 @@ private fun Header(app: DevApp) {
 private fun UploadCard(app: DevApp, state: DevState, dev: DevViewModel) {
     var channel by rememberSaveable { mutableStateOf("stable") }
     var notes by rememberSaveable { mutableStateOf("") }
+    var rollout by rememberSaveable { mutableStateOf(100) }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            dev.uploadApk(app.fullName, uri, channel, notes)
+            dev.uploadApk(app.fullName, uri, channel, notes, if (channel == "stable") rollout else 100)
             notes = ""
         }
     }
@@ -443,6 +526,11 @@ private fun UploadCard(app: DevApp, state: DevState, dev: DevViewModel) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Neue Version hochladen", style = MaterialTheme.typography.titleSmall)
             ChoiceChips(listOf("stable", "beta"), channel, { if (it == "stable") "Stabil" else "Beta" }) { channel = it }
+            if (channel == "stable") {
+                Text("Gestaffelter Rollout", style = MaterialTheme.typography.labelLarge)
+                ChoiceChips(ROLLOUT_STEPS, rollout, { "$it %" }) { rollout = it }
+                if (rollout < 100) Hint("Erst $rollout % der Nutzer bekommen die Version. Später auf 100 % erhöhen.")
+            }
             OutlinedTextField(notes, { notes = it.take(4000) }, label = { Text("Was ist neu?") }, minLines = 2,
                 modifier = Modifier.fillMaxWidth())
             val progress = state.upload
@@ -454,7 +542,8 @@ private fun UploadCard(app: DevApp, state: DevState, dev: DevViewModel) {
                     picker.launch(arrayOf("application/vnd.android.package-archive", "application/octet-stream"))
                 }, modifier = Modifier.fillMaxWidth()) { Text("APK auswählen und hochladen") }
             }
-            Hint("Version, Paketname und versionCode werden aus der APK gelesen und geprüft.")
+            Hint("Version, Paketname und versionCode werden aus der APK gelesen und geprüft" +
+                (if (app.reviewReleases) ". Neue Versionen werden vor der Veröffentlichung von einem Admin geprüft." else "."))
         }
     }
 }
