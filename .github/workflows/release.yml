@@ -17,9 +17,15 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # Alternativ im Browser: Actions → Release → "Run workflow" → Tag eingeben (wird auf dem gewählten Branch angelegt)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Neuer Tag, z. B. v2.1.0 (v2.2.0-beta1 = Beta)"
+        required: true
 
 concurrency:
-  group: release-${{ github.ref_name }}
+  group: release-${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: write
@@ -41,11 +47,17 @@ jobs:
         id: release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          scripts/version-from-tag.sh "$TAG" >/dev/null   # bricht bei ungültigem Tag ab, bevor etwas angelegt wird
           if ! gh release view "$TAG" >/dev/null 2>&1; then
             PRE=""; [[ "$TAG" == *-* ]] && PRE="--prerelease"
-            gh release create "$TAG" --title "ByteDroide ${TAG#v}" --generate-notes --verify-tag $PRE
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+              TARGET="--verify-tag"
+            else
+              TARGET="--target $GITHUB_SHA"   # "Run workflow": Tag wird mit dem Release angelegt
+            fi
+            gh release create "$TAG" --title "ByteDroide ${TAG#v}" --generate-notes $TARGET $PRE
           fi
           gh release view "$TAG" --json body -q .body > release-notes.txt
           echo "prerelease=$(gh release view "$TAG" --json isPrerelease -q .isPrerelease)" >> "$GITHUB_OUTPUT"
@@ -53,7 +65,7 @@ jobs:
       - name: Version aus dem Tag
         id: version
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           scripts/version-from-tag.sh "$TAG" | tee -a "$GITHUB_OUTPUT"
 
@@ -92,7 +104,7 @@ jobs:
       - name: An das GitHub-Release hängen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.ref_name }}" "${{ steps.apk.outputs.file }}" --clobber
+        run: gh release upload "${{ inputs.tag || github.ref_name }}" "${{ steps.apk.outputs.file }}" --clobber
 
       - name: Im ByteDroide-Store veröffentlichen
         env:
