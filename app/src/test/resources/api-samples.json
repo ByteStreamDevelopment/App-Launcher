@@ -38,7 +38,8 @@
      "version": ""
     },
     "review": "approved",
-    "can_manage": false
+    "can_manage": false,
+    "package": null
    },
    {
     "id": "Manhunt/manhunt",
@@ -77,7 +78,8 @@
      "version": ""
     },
     "review": "approved",
-    "can_manage": false
+    "can_manage": false,
+    "package": null
    },
    {
     "id": "anna/spiel",
@@ -93,7 +95,7 @@
      "tag": "1.1.0-beta",
      "name": "1.1.0-beta",
      "notes": "",
-     "published_at": "2026-11-08T19:16:56Z",
+     "published_at": "2026-11-08T21:00:22Z",
      "html_url": "",
      "channel": "beta"
     },
@@ -116,7 +118,8 @@
      "version": "1.1.0-beta"
     },
     "review": "approved",
-    "can_manage": false
+    "can_manage": false,
+    "package": "com.anna.spiel"
    }
   ],
   "user": {
@@ -162,7 +165,7 @@
   "codes_used": 0,
   "testers": 1,
   "unlocked_users": 1,
-  "created_at": 1794165416
+  "created_at": 1794171622
  },
  "me": {
   "user": {
@@ -187,7 +190,7 @@
     "amount_cents": 199,
     "price": "1,99 €",
     "status": "paid",
-    "created_at": 1794165416,
+    "created_at": 1794171622,
     "withdrawn_at": null,
     "can_withdraw": true
    }
@@ -206,7 +209,7 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794165416,
+    "created_at": 1794171621,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -223,7 +226,7 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794165416,
+    "created_at": 1794171622,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 1,
@@ -240,7 +243,7 @@
     "dev_requested": false,
     "notify_updates": true,
     "notify_news": false,
-    "created_at": 1794165416,
+    "created_at": 1794171622,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,

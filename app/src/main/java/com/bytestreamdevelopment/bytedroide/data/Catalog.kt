@@ -25,7 +25,9 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
     fun entries(apps: List<StoreApp>): List<AppEntry> = apps.map { entry(it) }
 
     fun entry(app: StoreApp): AppEntry {
-        val pkg = settings.packageFor(app.fullName)
+        // Gemerkter Paketname (über den Store installiert), sonst der vom Server – so werden auch Apps erkannt,
+        // die vorher von Hand installiert wurden (z. B. ByteDroide selbst)
+        val pkg = settings.packageFor(app.fullName) ?: app.packageName
         return AppEntry(app, installState(pkg, app), pkg)
     }
 
@@ -82,6 +84,7 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
                 ),
                 review = o.optString("review", "approved"),
                 canManage = o.optBoolean("can_manage"),
+                packageName = if (o.isNull("package")) null else o.optString("package").ifBlank { null },
             )
         }
 
