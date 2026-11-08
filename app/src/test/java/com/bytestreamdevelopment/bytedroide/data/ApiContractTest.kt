@@ -102,5 +102,19 @@ class ApiContractTest {
     }
 
     @Test
+    fun nachrichten() {
+        val t = StoreApi.parseThread(samples.getJSONObject("thread"))
+        assertEquals("Absturz", t.subject)
+        assertEquals("dev", t.role)
+        assertEquals("Pixel 7", t.device)
+        assertEquals(2, t.messages.size)
+        assertTrue(t.messages[1].fromDev)
+        assertTrue(t.messages[1].mine)
+        val list = samples.getJSONObject("threads")
+        assertEquals(1, list.getInt("unread"))
+        assertEquals("user", list.getJSONArray("threads").getJSONObject(0).getString("role"))
+    }
+
+    @Test
     fun preisFormat() = assertEquals("12,05 €", formatCents(1205))
 }

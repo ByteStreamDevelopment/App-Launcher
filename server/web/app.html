@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Mein Konto – ByteDroide</title>
+<link rel="icon" href="/favicon.ico" type="image/svg+xml">
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--brand:#3D5AFE;--brand2:#1A237E;--border:#e5e7eb;
+--ok:#059669;--warn:#d97706;--err:#dc2626;--chip:#eef2ff;--star:#f59e0b}
+@media (prefers-color-scheme:dark){:root{--bg:#0f1117;--card:#171a23;--text:#e5e7eb;--muted:#9ca3af;--border:#2a2f3a;--chip:#1e2440}}
+*{box-sizing:border-box}html,body{overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 16px 0}
+header .in{max-width:1040px;margin:0 auto}
+header .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px}
+header a.logo{color:#fff;text-decoration:none;font-weight:800;font-size:20px}header .sp{flex:1}
+header .who{opacity:.9}header button{background:rgba(255,255,255,.16)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto}nav.tabs a{color:rgba(255,255,255,.85);text-decoration:none;padding:10px 14px;
+border-radius:12px 12px 0 0;white-space:nowrap;font-weight:600}nav.tabs a.on{background:var(--bg);color:var(--brand)}
+.dot{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--err);color:#fff;font-size:12px;
+text-align:center;margin-left:4px}
+main{max-width:1040px;margin:0 auto;padding:20px 16px 60px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:18px 20px;margin:0 0 16px;min-width:0}
+h2{margin:0 0 12px;font-size:18px}h3{margin:16px 0 8px;font-size:15px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:10px;background:var(--card);
+color:var(--text);font:inherit}
+textarea{min-height:90px;resize:vertical}
+input[type=checkbox]{width:auto;margin:0 8px 0 0}
+button{background:var(--brand);color:#fff;border:0;border-radius:999px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer}
+button.sec{background:transparent;color:var(--brand);border:1px solid var(--border)}button.danger{background:var(--err)}
+button.small{padding:5px 12px;font-size:13px}button:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}.row>*{flex:1;min-width:150px}.row>.fit{flex:0 0 auto;min-width:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.app{cursor:pointer;transition:transform .1s}.app:hover{transform:translateY(-2px)}
+.t{display:flex;gap:12px;align-items:center}
+.icon{width:48px;height:48px;border-radius:12px;background:var(--chip);display:flex;align-items:center;justify-content:center;
+font-weight:700;font-size:20px;color:var(--brand);overflow:hidden;flex:none}.icon img{width:100%;height:100%;object-fit:cover}
+.muted{color:var(--muted);font-size:13px}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;background:var(--chip);
+color:var(--brand);margin:2px 4px 2px 0}.chip.ok{color:var(--ok)}.chip.warn{color:var(--warn)}.chip.err{color:var(--err)}
+table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:8px 6px;border-bottom:1px solid var(--border);
+text-align:left;vertical-align:top}.tablewrap{overflow-x:auto}
+code,pre{font-family:Menlo,Consolas,monospace;font-size:13px}pre{background:var(--chip);padding:12px;border-radius:10px;
+overflow-x:auto;white-space:pre-wrap;word-break:break-all}
+#toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#111827;color:#fff;padding:10px 18px;
+border-radius:999px;display:none;max-width:90vw;z-index:9}
+progress{width:100%;height:10px}
+.stats{display:flex;gap:20px;flex-wrap:wrap;margin:8px 0}.stats div{font-size:13px;color:var(--muted)}
+.stats b{display:block;font-size:20px;color:var(--text)}
+.alert{border-radius:12px;padding:10px 14px;margin:0 0 12px}.alert.warn{background:rgba(217,119,6,.12);color:var(--warn)}
+.alert.err{background:rgba(220,38,38,.1);color:var(--err)}.alert.ok{background:rgba(5,150,105,.12);color:var(--ok)}
+.tabs2{display:flex;gap:6px;margin:0 0 14px;flex-wrap:wrap}.tabs2 a{padding:6px 14px;border-radius:999px;background:var(--chip);
+text-decoration:none;font-weight:600;font-size:14px;color:var(--brand)}.tabs2 a.on{background:var(--brand);color:#fff}
+.thread{display:flex;flex-direction:column;gap:10px}
+.msg{max-width:80%;padding:10px 14px;border-radius:16px;background:var(--chip);white-space:pre-wrap;overflow-wrap:anywhere}
+.msg.mine{align-self:flex-end;background:var(--brand);color:#fff}.msg .meta{font-size:12px;opacity:.75;margin-bottom:2px}
+.list a.item{display:block;padding:12px 4px;border-bottom:1px solid var(--border);text-decoration:none;color:inherit}
+.list a.item.unread b{color:var(--brand)}
+.shot{position:relative;flex:none}.shot img{height:190px;border-radius:10px;border:1px solid var(--border);display:block}
+.shot .ctl{position:absolute;bottom:6px;left:6px;right:6px;display:flex;gap:4px;justify-content:center}
+.shot .ctl button{padding:3px 9px;font-size:13px}
+.center{max-width:460px;margin:30px auto}
+a{color:var(--brand)}
+</style>
+</head>
+<body>
+<header><div class="in"><div class="top"><a class="logo" href="/">&#129302; ByteDroide</a><span class="sp"></span>
+<a href="/apps" style="color:#fff">Zum Store</a><span class="who" id="who"></span>
+<button id="logout" style="display:none">Abmelden</button></div><nav class="tabs" id="tabs"></nav></div></header>
+<main id="main"></main>
+<div id="toast"></div>
+<script>
+"use strict";
+let token = null, me = null, unread = 0;
+try { token = localStorage.getItem("bd_token"); } catch (e) {}
+
+// --- Hilfen ------------------------------------------------------------------
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "value") el.value = v;
+    else if (k === "checked") el.checked = !!v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid !== null && kid !== undefined && kid !== false)
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+const $ = id => document.getElementById(id);
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.style.display = "none", 4000); }
+const money = c => (c / 100).toFixed(2).replace(".", ",") + " €";
+const price = c => c ? money(c) : "kostenlos";
+const date = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "–";
+const day = ts => ts ? new Date(ts * 1000).toLocaleDateString("de-DE") : "–";
+const size = b => b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
+const enc = id => id.split("/").map(encodeURIComponent).join("/");
+const ver = t => (t || "").replace(/^[vV](?=\d)/, "");
+const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
+
+async function api(method, path, body, raw) {
+  const opt = { method, headers: {} };
+  if (token) opt.headers.Authorization = "Bearer " + token;
+  if (body !== undefined) {
+    if (raw) { opt.body = body; opt.headers["Content-Type"] = "application/octet-stream"; }
+    else { opt.body = JSON.stringify(body); opt.headers["Content-Type"] = "application/json"; }
+  }
+  const r = await fetch(path, opt);
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401 && token && !path.startsWith("/api/login")) { setToken(null); location.hash = "#/login"; }
+  if (!r.ok) throw new Error(data.error || ("Fehler " + r.status));
+  return data;
+}
+async function run(fn) { try { await fn(); } catch (e) { toast(e.message); } }
+function render(...nodes) { $("main").replaceChildren(...nodes); window.scrollTo(0, 0); }
+function setToken(t) { token = t; try { t ? localStorage.setItem("bd_token", t) : localStorage.removeItem("bd_token"); } catch (e) {} }
+function card(...kids) { return h("div", { class: "card" }, ...kids); }
+function field(label, input) { return h("div", {}, h("label", {}, label), input); }
+function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
+
+// --- Kopf & Navigation ----------------------------------------------------------
+function header(active) {
+  $("who").textContent = me ? me.username + " · " + ({ admin: "Admin", developer: "Entwickler", user: "Benutzer" }[me.role]) : "";
+  $("logout").style.display = me ? "" : "none";
+  const tabs = me ? [["konto", "Konto"], ["kaeufe", "Käufe"], ["nachrichten", "Nachrichten"]] : [["login", "Anmelden"]];
+  if (me && me.is_developer) tabs.push(["entwickler", "Entwickler"]);
+  if (me && me.is_admin) tabs.push(["admin", "Admin"]);
+  $("tabs").replaceChildren(...tabs.map(([k, label]) => h("a", { href: "#/" + k, class: k === active ? "on" : "" }, label,
+    k === "nachrichten" && unread ? h("span", { class: "dot" }, unread) : null)));
+}
+$("logout").onclick = () => { api("POST", "/api/logout", {}).catch(() => {}); setToken(null); me = null; go("#/login"); };
+
+async function loadMe() {
+  if (!token) { me = null; return; }
+  try { me = (await api("GET", "/api/me")).user; unread = (await api("GET", "/api/threads")).unread; }
+  catch (e) { me = null; }
+}
+
+const routes = [];
+function on(pattern, handler, tab, auth = "user") { routes.push({ re: new RegExp("^" + pattern + "$"), handler, tab, auth }); }
+
+async function route() {
+  const hash = location.hash.replace(/^#/, "") || (token ? "/konto" : "/login");
+  const [path, qs] = hash.split("?");
+  const query = new URLSearchParams(qs || "");
+  if (me === null && token) await loadMe();
+  for (const r of routes) {
+    const m = path.match(r.re);
+    if (!m) continue;
+    if (r.auth !== "none" && !me) { sessionStorage.setItem("bd_after_login", "#" + hash); return go("#/login"); }
+    if (r.auth === "developer" && !me.is_developer) return go("#/konto");
+    if (r.auth === "admin" && !me.is_admin) return go("#/konto");
+    header(r.tab);
+    try { await r.handler(m.slice(1).map(decodeURIComponent), query); } catch (e) { render(card(h("div", { class: "alert err" }, e.message))); }
+    return;
+  }
+  go(token ? "#/konto" : "#/login");
+}
+window.addEventListener("hashchange", route);
+
+// --- Anmelden / Registrieren ----------------------------------------------------
+on("/login", async (_, q) => {
+  if (me) return go("#/konto");
+  let mode = q.get("entwickler") || q.get("registrieren") ? 1 : 0;
+  const box = h("div", { class: "card center" });
+  const draw = () => {
+    const user = h("input", { autocomplete: "username" }), email = h("input", { type: "email", autocomplete: "email" });
+    const pw = h("input", { type: "password", autocomplete: mode ? "new-password" : "current-password" });
+    const pw2 = h("input", { type: "password", autocomplete: "new-password" });
+    const dev = h("input", { type: "checkbox", checked: !!q.get("entwickler") }), note = h("textarea", { placeholder: "Was möchtest du veröffentlichen? (optional)" });
+    const terms = h("input", { type: "checkbox" });
+    const submit = () => run(async () => {
+      let r;
+      if (mode === 0) r = await api("POST", "/api/login", { username: user.value, password: pw.value });
+      else {
+        if (pw.value !== pw2.value) throw new Error("Die Passwörter stimmen nicht überein");
+        r = await api("POST", "/api/register", { username: user.value, email: email.value, password: pw.value,
+          accept_terms: terms.checked, developer: dev.checked, developer_note: note.value });
+        toast(r.first_admin ? "Konto erstellt – du bist Admin" : "Konto erstellt – bitte E-Mail bestätigen");
+      }
+      setToken(r.token); me = null; await loadMe();
+      const after = sessionStorage.getItem("bd_after_login"); sessionStorage.removeItem("bd_after_login");
+      const back = sessionStorage.getItem("bd_return"); sessionStorage.removeItem("bd_return");
+      if (back) location.href = back; else go(after || "#/konto");
+    });
+    pw.addEventListener("keydown", e => e.key === "Enter" && mode === 0 && submit());
+    box.replaceChildren(
+      h("div", { class: "tabs2" }, h("a", { href: "#", class: mode ? "" : "on", onclick: ev => { ev.preventDefault(); mode = 0; draw(); } }, "Anmelden"),
+        h("a", { href: "#", class: mode ? "on" : "", onclick: ev => { ev.preventDefault(); mode = 1; draw(); } }, "Registrieren")),
+      field(mode ? "Benutzername (3–32 Zeichen)" : "Benutzername oder E-Mail", user),
+      mode ? field("E-Mail-Adresse", email) : null,
+      field(mode ? "Passwort (mindestens 8 Zeichen)" : "Passwort", pw),
+      mode ? field("Passwort wiederholen", pw2) : null,
+      mode ? h("label", { style: "display:flex;align-items:center;color:var(--text);margin-top:14px" }, dev, "Ich möchte Entwickler werden (Admin gibt frei)") : null,
+      mode ? note : null,
+      mode ? h("label", { style: "display:flex;align-items:flex-start;color:var(--text);margin-top:12px" }, terms,
+        h("span", {}, "Ich akzeptiere die ", h("a", { href: "/agb", target: "_blank" }, "Nutzungsbedingungen"), " und habe die ",
+          h("a", { href: "/datenschutz", target: "_blank" }, "Datenschutzerklärung"), " gelesen.")) : null,
+      h("div", { style: "margin-top:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center" }, h("button", { onclick: submit }, mode ? "Konto erstellen" : "Anmelden"),
+        mode ? null : h("a", { href: "#", onclick: ev => { ev.preventDefault(); forgot(); } }, "Passwort vergessen?")));
+    (mode ? user : user).focus();
+  };
+  const forgot = () => {
+    const login = prompt("Benutzername oder E-Mail-Adresse:");
+    if (login) run(async () => { await api("POST", "/api/password/forgot", { login }); toast("Falls ein Konto existiert, ist eine E-Mail unterwegs."); });
+  };
+  render(h("div", { class: "center" }, h("h2", { style: "text-align:center" }, "Willkommen bei ByteDroide"), box));
+  draw();
+}, "login", "none");
+
+// --- Konto -----------------------------------------------------------------------
+on("/konto", async () => {
+  me = (await api("GET", "/api/me")).user;
+  header("konto");
+  const email = h("input", { type: "email", value: me.email });
+  const old = h("input", { type: "password", autocomplete: "current-password" }), neu = h("input", { type: "password", autocomplete: "new-password" });
+  const code = h("input", { placeholder: "XXXX-XXXX", style: "font-family:monospace;text-transform:uppercase" });
+  const toggle = (key, label, hint) => h("label", { style: "display:flex;align-items:flex-start;color:var(--text);gap:4px" },
+    h("input", { type: "checkbox", checked: me[key], onchange: ev => run(async () => { me = (await api("PUT", "/api/me", { [key]: ev.target.checked })).user; toast("Gespeichert"); }) }),
+    h("span", {}, label, h("div", { class: "muted" }, hint)));
+  const nodes = [
+    card(h("div", { class: "t" }, h("div", { class: "icon" }, me.username[0].toUpperCase()),
+      h("div", {}, h("h2", { style: "margin:0" }, me.username), h("div", { class: "muted" }, me.email),
+        h("span", { class: "chip" }, { admin: "Admin", developer: "Entwickler", user: "Benutzer" }[me.role]),
+        me.dev_requested ? h("span", { class: "chip warn" }, "Entwickler-Anfrage läuft") : null))),
+  ];
+  if (!me.email_verified) nodes.push(h("div", { class: "alert warn" }, "Deine E-Mail-Adresse ist noch nicht bestätigt. ",
+    h("a", { href: "#", onclick: ev => { ev.preventDefault(); run(async () => { await api("POST", "/api/me/verify", {}); toast("Bestätigungs-E-Mail gesendet"); }); } }, "Erneut senden")));
+  nodes.push(card(h("h2", {}, "Freischalt-Code einlösen"), h("p", { class: "muted" }, "Codes schalten Apps dauerhaft für dein Konto frei – bei Kauf-Apps als Gutschein."),
+    h("div", { class: "row" }, code, h("div", { class: "fit" }, h("button", { onclick: () => run(async () => {
+      const r = await api("POST", "/api/redeem", { code: code.value }); toast(r.name + " ist jetzt freigeschaltet 🎉"); code.value = ""; }) }, "Einlösen")))));
+  if (!me.is_developer && !me.dev_requested) {
+    const note = h("textarea", { placeholder: "Was möchtest du veröffentlichen? (optional)" });
+    nodes.push(card(h("h2", {}, "Entwickler werden"), h("p", { class: "muted" }, "Veröffentliche eigene Apps in ByteDroide. Ein Admin gibt den Zugang frei."), note,
+      h("button", { style: "margin-top:10px", onclick: () => run(async () => { me = (await api("POST", "/api/me/developer", { note: note.value })).user; toast("Anfrage gesendet"); route(); }) }, "Anfrage senden")));
+  }
+  const ntfyBox = h("div");
+  const drawNtfy = (url) => ntfyBox.replaceChildren(me.ntfy_topic ? h("div", {},
+    h("p", {}, "Thema: ", h("code", {}, me.ntfy_topic)), h("p", { class: "muted" }, "In der ntfy-App abonnieren. Wie ein Passwort behandeln."),
+    h("div", { class: "row" }, h("div", { class: "fit" }, h("a", { href: url || "#", target: "_blank", onclick: async ev => { if (!url) { ev.preventDefault(); const i = await api("GET", "/api/info"); window.open((i.ntfy_url || "https://ntfy.sh") + "/" + me.ntfy_topic); } } }, h("button", {}, "In ntfy öffnen"))),
+      h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => { await api("POST", "/api/me/ntfy/test", {}); toast("Test gesendet"); }) }, "Test senden")),
+      h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => { const r = await api("POST", "/api/me/ntfy", { enable: false }); me = r.user; drawNtfy(); }) }, "Ausschalten"))))
+    : h("button", { onclick: () => run(async () => { const r = await api("POST", "/api/me/ntfy", { enable: true }); me = r.user; drawNtfy(r.ntfy_url); }) }, "Push über ntfy einschalten"));
+  drawNtfy();
+  nodes.push(card(h("h2", {}, "Benachrichtigungen"),
+    toggle("notify_updates", "Updates meiner Apps", "Wenn eine App, die du geladen hast, eine neue Version bekommt"),
+    toggle("notify_news", "Neuigkeiten", "Gelegentliche Ankündigungen rund um ByteDroide"),
+    h("h3", {}, "Push über ntfy (ohne Google)"), ntfyBox));
+  nodes.push(card(h("h2", {}, "Konto & Sicherheit"),
+    h("div", { class: "row" }, field("E-Mail-Adresse", email), h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => {
+      me = (await api("PUT", "/api/me", { email: email.value })).user; toast("Bestätigungs-E-Mail gesendet"); }) }, "Ändern"))),
+    h("div", { class: "row" }, field("Aktuelles Passwort", old), field("Neues Passwort", neu), h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => {
+      await api("POST", "/api/me/password", { old_password: old.value, new_password: neu.value }); old.value = neu.value = ""; toast("Passwort geändert"); }) }, "Ändern"))),
+    h("h3", {}, "Deine Daten"),
+    h("div", { class: "row" }, h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => {
+      const data = await api("GET", "/api/me/export");
+      const a = h("a", { href: URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })), download: "bytedroide-daten.json" }); a.click(); }) }, "Daten exportieren")),
+      h("div", { class: "fit" }, h("button", { class: "danger", onclick: () => { const pw = prompt("Konto endgültig löschen? Zur Bestätigung dein Passwort:"); if (pw) run(async () => {
+        await api("DELETE", "/api/me", { password: pw }); setToken(null); me = null; toast("Konto gelöscht"); go("#/login"); }); } }, "Konto löschen")))));
+  render(...nodes);
+}, "konto");
+
+// --- Käufe -----------------------------------------------------------------------
+on("/kaeufe", async () => {
+  const { purchases } = await api("GET", "/api/me/purchases");
+  const status = { paid: "Bezahlt", withdrawal_requested: "Widerruf eingegangen", refunded: "Erstattet" };
+  render(card(h("h2", {}, "Meine Käufe"), purchases.length ? h("div", { class: "tablewrap" }, h("table", {},
+    h("tr", {}, h("th", {}, "App"), h("th", {}, "Preis"), h("th", {}, "Datum"), h("th", {}, "Status"), h("th", {})),
+    purchases.map(p => h("tr", {}, h("td", {}, h("a", { href: "/app/" + enc(p.app) }, p.app_name), h("div", { class: "muted" }, "Beleg BD-" + String(p.id).padStart(6, "0"))),
+      h("td", {}, p.price), h("td", {}, date(p.created_at)), h("td", {}, status[p.status] || p.status),
+      h("td", {}, p.can_withdraw ? h("button", { class: "sec small", onclick: () => {
+        if (confirm(`Hiermit widerrufe ich den Vertrag über den Kauf von „${p.app_name}“ (${p.price}). Widerruf bestätigen?`))
+          run(async () => { await api("POST", `/api/me/purchases/${p.id}/withdraw`, {}); toast("Widerruf eingegangen – Bestätigung per E-Mail"); route(); });
+      } }, "Vertrag widerrufen") : null))))) : h("p", { class: "muted" }, "Noch keine Käufe."),
+    h("p", { class: "muted" }, h("a", { href: "/widerruf" }, "Widerrufsbelehrung"), " · ", h("a", { href: "/agb" }, "Nutzungsbedingungen"))));
+}, "kaeufe");
+
+// --- Nachrichten -----------------------------------------------------------------
+on("/nachrichten", async () => {
+  const { threads, unread: u } = await api("GET", "/api/threads");
+  unread = u; header("nachrichten");
+  const kinds = { bug: "🐞", feedback: "💡", question: "❓" };
+  render(card(h("h2", {}, "Nachrichten"),
+    h("p", { class: "muted" }, "Gespräche mit Entwicklern – und als Entwickler mit deinen Nutzern. Neue Gespräche startest du auf der Seite einer App."),
+    threads.length ? h("div", { class: "list" }, threads.map(t => h("a", { class: "item" + (t.unread ? " unread" : ""), href: "#/nachrichten/" + t.id },
+      h("div", { style: "display:flex;gap:8px;align-items:center;flex-wrap:wrap" }, h("span", {}, kinds[t.kind] || "💬"), h("b", {}, t.subject),
+        t.unread ? h("span", { class: "dot" }, "neu") : null, t.status === "closed" ? h("span", { class: "chip" }, "erledigt") : null,
+        h("span", { class: "muted", style: "margin-left:auto" }, date(t.updated_at))),
+      h("div", { class: "muted" }, `${t.app_name} · ${t.role === "dev" ? "von " + t.with : "an den Entwickler"} · ${t.kind_label}`),
+      h("div", { class: "muted", style: "white-space:nowrap;overflow:hidden;text-overflow:ellipsis" }, t.preview))))
+      : h("p", { class: "muted" }, "Noch keine Nachrichten.")));
+}, "nachrichten");
+
+on("/nachrichten/(\\d+)", async ([tid]) => {
+  const t = await api("GET", "/api/threads/" + tid);
+  const { unread: u } = await api("GET", "/api/threads"); unread = u; header("nachrichten");
+  const body = h("textarea", { placeholder: "Antwort schreiben …" });
+  render(card(h("div", { style: "display:flex;gap:10px;align-items:center;flex-wrap:wrap" }, h("a", { href: "#/nachrichten" }, "← Alle"),
+      h("span", { class: "sp", style: "flex:1" }), h("button", { class: "sec small", onclick: () => run(async () => {
+        await api("PUT", "/api/threads/" + tid, { status: t.status === "open" ? "closed" : "open" }); route(); }) }, t.status === "open" ? "Als erledigt markieren" : "Wieder öffnen")),
+    h("h2", { style: "margin-top:10px" }, t.subject),
+    h("div", { class: "muted" }, `${t.kind_label} zu `, h("a", { href: "/app/" + enc(t.app) }, t.app_name), ` · ${t.role === "dev" ? "von " + t.user : "an " + t.developer} · ${date(t.created_at)}`),
+    t.device ? h("div", { class: "muted" }, "Gerät: " + t.device) : null,
+    h("div", { class: "thread", style: "margin-top:16px" }, t.messages.map(m => h("div", { class: "msg" + (m.mine ? " mine" : "") },
+      h("div", { class: "meta" }, `${m.author}${m.from_dev ? " (Entwickler)" : ""} · ${date(m.created_at)}`), m.body))),
+    h("div", { style: "margin-top:16px" }, body, h("button", { style: "margin-top:8px", onclick: () => run(async () => {
+      if (!body.value.trim()) return; await api("POST", `/api/threads/${tid}/messages`, { message: body.value }); route(); }) }, "Senden"))));
+}, "nachrichten");
+
+// --- Entwickler: Übersicht -----------------------------------------------------------
+function icon(app) { return h("div", { class: "icon" }, app.avatar_url ? h("img", { src: app.avatar_url, alt: "" }) : app.name[0].toUpperCase()); }
+function reviewChip(r) {
+  return { approved: h("span", { class: "chip ok" }, "Veröffentlicht"), pending: h("span", { class: "chip warn" }, "In Prüfung"),
+           rejected: h("span", { class: "chip err" }, "Abgelehnt") }[r];
+}
+function appCard(app) {
+  return h("div", { class: "card app", onclick: () => go("#/entwickler/app/" + app.id) },
+    h("div", { class: "t" }, icon(app), h("div", { style: "min-width:0" }, h("b", {}, app.name), h("div", { class: "muted" }, app.id + (app.developer ? "" : " · Admin-App")))),
+    h("div", { style: "margin-top:10px" }, reviewChip(app.review),
+      app.price_cents ? h("span", { class: "chip" }, price(app.price_cents)) : null,
+      app.access !== "open" ? h("span", { class: "chip" }, app.access === "code" ? "Mit Code" : "Versteckt") : null,
+      app.beta !== "off" ? h("span", { class: "chip" }, "Beta") : null,
+      app.pending_versions && app.pending_versions.length ? h("span", { class: "chip warn" }, "Version in Prüfung") : null),
+    h("div", { class: "muted", style: "margin-top:6px" }, "Version " + (ver(app.stable) || "–") + (app.beta_version ? " · Beta " + ver(app.beta_version) : "") +
+      " · " + app.downloads + " Downloads" + (app.rating && app.rating.count ? ` · ★ ${app.rating.average} (${app.rating.count})` : "")));
+}
+
+on("/entwickler", async () => {
+  const [{ apps }, { keys }] = await Promise.all([api("GET", "/api/dev/apps"), api("GET", "/api/dev/keys")]);
+  render(card(h("div", { class: "row" }, h("h2", { style: "margin:0" }, "Meine Apps"),
+      h("div", { class: "fit" }, h("button", { onclick: () => go("#/entwickler/neu") }, "+ Neue App"))),
+      apps.length ? h("div", { class: "grid", style: "margin-top:14px" }, apps.map(appCard)) : h("p", { class: "muted" }, "Noch keine Apps. Lege deine erste an!"),
+      h("p", { class: "muted" }, "Anleitung: ", h("a", { href: "/hilfe/entwickler", target: "_blank" }, "Dokumentation für Entwickler"))),
+    keysCard(keys));
+}, "entwickler", "developer");
+
+function keysCard(keys) {
+  const label = h("input", { placeholder: "z. B. GitHub Actions" });
+  const out = h("div");
+  return card(h("h2", {}, "API-Schlüssel"),
+    h("p", { class: "muted" }, "Für automatische Uploads aus CI (GitHub Actions, Forgejo Actions). Wie ein Passwort behandeln!"),
+    h("div", { class: "row" }, label, h("div", { class: "fit" }, h("button", { onclick: () => run(async () => {
+      const r = await api("POST", "/api/dev/keys", { label: label.value });
+      out.replaceChildren(h("p", {}, "Neuer Schlüssel – wird nur jetzt angezeigt:"), h("pre", {}, r.token));
+    }) }, "Erstellen"))), out,
+    keys.length ? h("div", { class: "tablewrap" }, h("table", { style: "margin-top:10px" }, keys.map(k => h("tr", {}, h("td", {}, k.label),
+      h("td", { class: "muted" }, "erstellt " + date(k.created_at)), h("td", { class: "muted" }, "zuletzt " + date(k.last_used)),
+      h("td", {}, h("button", { class: "sec small", onclick: () => run(async () => { await api("DELETE", "/api/dev/keys/" + k.id); route(); }) }, "Widerrufen")))))) : null);
+}
+
+// --- Entwickler: neue App ------------------------------------------------------------
+on("/entwickler/neu", async () => {
+  const f = {
+    name: h("input", { placeholder: "z. B. Super Spiel" }), slug: h("input", { placeholder: "super-spiel" }),
+    description: h("textarea", { placeholder: "Was kann die App? Die erste Zeile erscheint in Listen." }),
+    category: h("input", { placeholder: "z. B. Spiele" }),
+    source: h("select", {}, h("option", { value: "upload" }, "APK hier hochladen"), h("option", { value: "repo" }, "Aus einem Repository (GitHub, Forgejo, Gitea, Codeberg)")),
+    source_url: h("input", { placeholder: "https://github.com/name/app" }), source_token: h("input", { placeholder: "nur für private Repos", type: "password" }),
+    price: h("input", { type: "number", min: "0", step: "0.01", value: "0" }),
+  };
+  f.name.addEventListener("input", () => { if (!f.slug.dataset.touched)
+    f.slug.value = f.name.value.toLowerCase().replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40); });
+  f.slug.addEventListener("input", () => f.slug.dataset.touched = "1");
+  const repoBox = h("div", { style: "display:none" }, field("Repository-Adresse", f.source_url), field("Zugangs-Token (optional)", f.source_token),
+    h("p", { class: "muted" }, "Es zählt immer das neueste Release mit einer .apk-Datei. Pre-Releases werden zur Beta."));
+  f.source.addEventListener("change", () => repoBox.style.display = f.source.value === "repo" ? "" : "none");
+  render(card(h("a", { href: "#/entwickler" }, "← Zurück"), h("h2", { style: "margin-top:8px" }, "Neue App"),
+    h("div", { class: "row" }, field("Name", f.name), field(`Kurzname (Adresse: ${me.username}/…)`, f.slug)),
+    field("Beschreibung", f.description),
+    h("div", { class: "row" }, field("Kategorie", f.category), field("Preis in € (0 = kostenlos)", f.price)),
+    field("Woher kommen die Versionen?", f.source), repoBox,
+    h("p", { class: "muted" }, "Neue Apps werden vor der Veröffentlichung von einem Admin geprüft."),
+    h("button", { onclick: () => run(async () => {
+      const body = { name: f.name.value, slug: f.slug.value, description: f.description.value, category: f.category.value,
+        price_cents: Math.round(parseFloat(f.price.value || "0") * 100) };
+      if (f.source.value === "repo") { body.source_url = f.source_url.value; body.source_token = f.source_token.value; }
+      const app = await api("POST", "/api/dev/apps", body); toast("App angelegt"); go("#/entwickler/app/" + app.id);
+    }) }, "Anlegen")));
+}, "entwickler", "developer");
+
+// --- Entwickler: App verwalten ------------------------------------------------------
+on("/entwickler/app/([^/]+/[^/]+)", async ([id]) => {
+  const app = await api("GET", "/api/dev/apps/" + enc(id));
+  const upload = app.source_type === "upload";
+  const [rel, codes, testers] = await Promise.all([
+    upload ? api("GET", `/api/dev/apps/${enc(id)}/releases`) : { releases: [] },
+    api("GET", `/api/dev/apps/${enc(id)}/codes`), app.beta !== "off" ? api("GET", `/api/dev/apps/${enc(id)}/testers`) : { testers: [] }]);
+  const reload = () => route();
+  const back = me.is_admin && location.hash.includes("from=admin") ? "#/admin/apps" : "#/entwickler";
+
+  const nodes = [card(
+    h("div", { class: "t" }, icon(app), h("div", { style: "flex:1;min-width:0" }, h("h2", { style: "margin:0" }, app.name),
+      h("div", { class: "muted" }, app.id + (app.package_name ? " · " + app.package_name : ""))),
+      h("a", { href: back }, "← Zurück")),
+    h("div", { style: "margin-top:10px" }, reviewChip(app.review), h("a", { href: "/app/" + enc(app.id), target: "_blank", style: "margin-left:8px" }, "Store-Seite ansehen")),
+    app.review_note ? h("p", { class: "muted" }, "Hinweis der Prüfung: " + app.review_note) : null,
+    app.source_error ? h("div", { class: "alert err" }, "Quelle: " + app.source_error) : null,
+    app.pending_versions.length ? h("div", { class: "alert warn" }, "Wartet auf Admin-Prüfung: " + app.pending_versions.join(", ")) : null,
+    app.blocked_versions.length ? h("div", { class: "alert err" }, "Gesperrt (abgelehnt/Virenfund): " + app.blocked_versions.join(", ")) : null,
+    me.is_admin && app.review !== "approved" ? h("div", { class: "alert warn" }, "Admin: ",
+      h("button", { class: "small", onclick: () => run(async () => { await api("PUT", "/api/admin/apps/" + enc(id), { review: "approved" }); toast("Freigegeben"); reload(); }) }, "Freigeben"), " ",
+      h("button", { class: "sec small", onclick: () => { const n = prompt("Begründung"); if (n !== null) run(async () => { await api("PUT", "/api/admin/apps/" + enc(id), { review: "rejected", review_note: n }); reload(); }); } }, "Ablehnen")) : null,
+    h("div", { class: "stats" },
+      h("div", {}, h("b", {}, app.downloads), "Downloads"), h("div", {}, h("b", {}, app.downloads_30d), "letzte 30 Tage"),
+      h("div", {}, h("b", {}, app.sales), "Verkäufe"), h("div", {}, h("b", {}, money(app.revenue_cents)), "Umsatz"),
+      h("div", {}, h("b", {}, app.rating.count ? "★ " + app.rating.average : "–"), app.rating.count + " Bewertungen"),
+      h("div", {}, h("b", {}, app.testers), "Beta-Tester"), h("div", {}, h("b", {}, app.unlocked_users), "freigeschaltet")))];
+
+  if (upload) {
+    const file = h("input", { type: "file", accept: ".apk,application/vnd.android.package-archive" });
+    const version = h("input", { placeholder: "wird aus der APK gelesen" });
+    const channel = h("select", {}, h("option", { value: "stable" }, "Stabil"), h("option", { value: "beta" }, "Beta"));
+    const rollout = h("select", {}, [100, 50, 25, 10].map(v => h("option", { value: v }, v === 100 ? "100 % (alle)" : v + " %")));
+    const notes = h("textarea", { placeholder: "Was ist neu?" });
+    const bar = h("progress", { max: "100", value: "0", style: "display:none" });
+    const btn = h("button", { onclick: () => {
+      if (!file.files[0]) return toast("Bitte eine APK auswählen");
+      const q = new URLSearchParams({ channel: channel.value, version: version.value, notes: notes.value, rollout: channel.value === "stable" ? rollout.value : 100 });
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", `/api/dev/apps/${enc(id)}/releases?${q}`);
+      xhr.setRequestHeader("Authorization", "Bearer " + token);
+      xhr.setRequestHeader("Content-Type", "application/vnd.android.package-archive");
+      xhr.upload.onprogress = e => { bar.style.display = ""; bar.value = e.loaded / e.total * 100; };
+      xhr.onload = () => { btn.disabled = false; bar.style.display = "none"; let r = {}; try { r = JSON.parse(xhr.responseText); } catch (e) {}
+        if (xhr.status === 200) { toast(r.status === "pending" ? `Version ${r.version} wartet auf Prüfung` : `Version ${r.version} veröffentlicht`); reload(); } else toast(r.error || "Upload fehlgeschlagen"); };
+      xhr.onerror = () => { btn.disabled = false; toast("Upload fehlgeschlagen"); };
+      btn.disabled = true; xhr.send(file.files[0]);
+    } }, "Hochladen");
+    nodes.push(card(h("h2", {}, "Neue Version hochladen"), field("APK-Datei", file),
+      h("div", { class: "row" }, field("Version (optional)", version), field("Kanal", channel), field("Rollout (nur Stabil)", rollout)),
+      field("Neuigkeiten", notes), h("div", { style: "margin:12px 0" }, bar), btn,
+      h("p", { class: "muted" }, "Paketname, versionName und versionCode werden geprüft. Der versionCode muss bei jedem Upload steigen."),
+      rel.releases.length ? h("div", { class: "tablewrap" }, h("table", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Kanal"), h("th", {}, "Größe"), h("th", {}, "Datum"), h("th", {})),
+        rel.releases.map(r => h("tr", {}, h("td", {}, ver(r.version), h("div", { class: "muted" }, "Code " + (r.version_code ?? "?")),
+            r.status === "pending" ? h("span", { class: "chip warn" }, "Wartet auf Prüfung") : null,
+            r.status === "rejected" ? h("span", { class: "chip err", title: r.review_note || "" }, "Abgelehnt") : null,
+            r.scan === "clean" ? h("span", { class: "chip ok" }, "Virenscan ✓") : null),
+          h("td", {}, r.channel === "beta" ? "Beta" : "Stabil", r.channel === "stable" && r.status === "approved" ? h("div", {}, h("a", { href: "#", onclick: ev => { ev.preventDefault();
+            const v = prompt(`Rollout für ${r.version} in Prozent (1–100):`, r.rollout); if (v) run(async () => { await api("PUT", `/api/dev/apps/${enc(id)}/releases/${r.id}`, { rollout: +v }); toast("Rollout: " + v + " %"); reload(); }); } }, "Rollout " + r.rollout + " %")) : null),
+          h("td", {}, size(r.size)), h("td", {}, date(r.created_at)),
+          h("td", {}, h("button", { class: "sec small", onclick: () => confirm(`Version ${r.version} löschen?`) && run(async () => { await api("DELETE", `/api/dev/apps/${enc(id)}/releases/${r.id}`); reload(); }) }, "Löschen")))))) : null,
+      h("h3", {}, "Automatisch aus CI hochladen"),
+      h("pre", {}, `curl --fail -X POST -H "Authorization: Bearer <API-SCHLÜSSEL>" \\\n  --data-binary @app/build/outputs/apk/release/app-release.apk \\\n  "${location.origin}/api/dev/apps/${id}/releases?channel=stable"`)));
+  } else {
+    nodes.push(card(h("h2", {}, "Quelle"), h("p", {}, h("a", { href: app.source_url, target: "_blank" }, app.source_url)),
+      h("p", { class: "muted" }, "Neue Versionen: dort ein Release mit .apk-Datei anlegen. Pre-Releases werden zur Beta."),
+      app.stable ? h("p", {}, "Aktuell: ", h("b", {}, ver(app.stable)), app.beta_version ? " · Beta " + ver(app.beta_version) : "") : null));
+  }
+
+  // Screenshots mit Reihenfolge
+  const shots = app.screenshots.slice();
+  const shotInput = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", multiple: true, style: "display:none",
+    onchange: () => run(async () => { for (const f of shotInput.files) await api("POST", `/api/dev/apps/${enc(id)}/screenshots`, f, true); toast("Hochgeladen"); reload(); }) });
+  const move = (i, d) => run(async () => { const o = shots.map(s => s.id); [o[i], o[i + d]] = [o[i + d], o[i]];
+    await api("PUT", `/api/dev/apps/${enc(id)}/screenshots`, { order: o }); reload(); });
+  nodes.push(card(h("h2", {}, `Screenshots (${shots.length}/8)`),
+    h("p", { class: "muted" }, "Mit den Pfeilen sortieren – der erste Screenshot ist der wichtigste."),
+    h("div", { style: "display:flex;gap:10px;overflow-x:auto;padding-bottom:6px" }, shots.map((sh, i) => h("div", { class: "shot" },
+      h("img", { src: sh.url, alt: "Screenshot " + (i + 1) }),
+      h("div", { class: "ctl" }, h("button", { class: "small", disabled: i === 0, title: "Nach vorne", onclick: () => move(i, -1) }, "←"),
+        h("button", { class: "danger small", title: "Löschen", onclick: () => run(async () => { await api("DELETE", `/api/dev/apps/${enc(id)}/screenshots/${sh.id}`); reload(); }) }, "✕"),
+        h("button", { class: "small", disabled: i === shots.length - 1, title: "Nach hinten", onclick: () => move(i, 1) }, "→"))))),
+    shots.length < 8 ? h("button", { class: "sec", style: "margin-top:10px", onclick: () => shotInput.click() }, "Screenshots hinzufügen") : null,
+    shotInput, h("p", { class: "muted" }, "PNG, JPEG oder WebP bis 3 MB.")));
+
+  // Einstellungen
+  const f = {
+    name: h("input", { value: app.name }), description: h("textarea", {}, app.description),
+    category: h("input", { value: app.category }), homepage: h("input", { value: app.homepage, placeholder: "https://…" }),
+    price: h("input", { type: "number", min: "0", step: "0.01", value: (app.price_cents / 100).toFixed(2) }),
+    access: h("select", {}, [["open", "Offen – jeder"], ["code", "Nur mit Freischalt-Code"], ["hidden", "Versteckt"]].map(([v, l]) => h("option", { value: v, selected: app.access === v }, l))),
+    beta: h("select", {}, [["off", "Kein Beta-Programm"], ["open", "Offen – jeder kann beitreten"], ["closed", "Geschlossen – nur eingeladene"]].map(([v, l]) => h("option", { value: v, selected: app.beta === v }, l))),
+    source_url: h("input", { value: app.source_url }),
+    source_token: h("input", { type: "password", placeholder: app.has_source_token ? "•••••• (gespeichert)" : "nur für private Repos" }),
+  };
+  const iconInput = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", style: "display:none", onchange: () => run(async () => {
+    await api("POST", `/api/dev/apps/${enc(id)}/icon`, iconInput.files[0], true); toast("Icon gespeichert"); reload(); }) });
+  nodes.push(card(h("h2", {}, "Einstellungen"),
+    h("div", { class: "row" }, field("Name", f.name), field("Kategorie", f.category)),
+    field("Beschreibung", f.description), field("Webseite", f.homepage),
+    !upload && app.source_type !== "forgejo_auto" ? h("div", { class: "row" }, field("Repository", f.source_url), field("Token (leer = unverändert)", f.source_token)) : null,
+    h("div", { class: "row" }, field("Freigabe", f.access), field("Beta", f.beta), field("Preis in €", f.price)),
+    h("div", { class: "row", style: "margin-top:14px" }, h("div", { class: "fit" }, h("button", { onclick: () => run(async () => {
+      const body = { name: f.name.value, description: f.description.value, category: f.category.value, homepage: f.homepage.value,
+        price_cents: Math.round(parseFloat(f.price.value || "0") * 100), access: f.access.value, beta: f.beta.value };
+      if (!upload && app.source_type !== "forgejo_auto") { if (f.source_url.value !== app.source_url) body.source_url = f.source_url.value; if (f.source_token.value) body.source_token = f.source_token.value; }
+      await api("PUT", "/api/dev/apps/" + enc(id), body); toast("Gespeichert"); reload(); }) }, "Speichern")),
+      h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => iconInput.click() }, "Icon hochladen")), iconInput,
+      h("div", { class: "fit" }, h("button", { class: "danger", onclick: () => confirm(`„${app.name}“ wirklich löschen? Alle Versionen, Codes und Bewertungen gehen verloren.`) && run(async () => {
+        await api("DELETE", "/api/dev/apps/" + enc(id)); toast("Gelöscht"); go(back); }) }, "App löschen")))));
+
+  // Codes
+  const note = h("input", { placeholder: "Notiz, z. B. für wen" }), count = h("input", { type: "number", value: "1", min: "1", max: "50" });
+  nodes.push(card(h("h2", {}, "Freischalt-Codes"),
+    h("p", { class: "muted" }, "Jeder Code schaltet die App für genau ein Konto dauerhaft frei – bei Kauf-Apps als Gutschein."),
+    h("div", { class: "row" }, note, h("div", { style: "max-width:100px" }, count),
+      h("div", { class: "fit" }, h("button", { onclick: () => run(async () => {
+        const r = await api("POST", `/api/dev/apps/${enc(id)}/codes`, { count: +count.value, note: note.value }); toast(r.codes.length + " Code(s) erstellt"); reload(); }) }, "Erzeugen"))),
+    codes.codes.length ? h("div", { class: "tablewrap" }, h("table", { style: "margin-top:10px" }, codes.codes.map(c => h("tr", {},
+      h("td", {}, h("code", {}, c.code)), h("td", {}, c.note), h("td", { class: "muted" }, c.used_by ? "eingelöst von " + c.used_by : "frei"),
+      h("td", {}, h("button", { class: "sec small", onclick: () => run(async () => { await api("DELETE", "/api/dev/codes/" + c.code); reload(); }) }, "Löschen")))))) : null));
+
+  if (app.beta !== "off") {
+    const uname = h("input", { placeholder: "Benutzername" });
+    nodes.push(card(h("h2", {}, "Beta-Tester"),
+      h("div", { class: "row" }, uname, h("div", { class: "fit" }, h("button", { onclick: () => run(async () => {
+        await api("POST", `/api/dev/apps/${enc(id)}/testers`, { username: uname.value }); toast("Eingeladen"); reload(); }) }, "Einladen"))),
+      testers.testers.length ? h("table", { style: "margin-top:10px" }, testers.testers.map(t => h("tr", {}, h("td", {}, t.username),
+        h("td", { class: "muted" }, "seit " + day(t.joined_at)),
+        h("td", {}, h("button", { class: "sec small", onclick: () => run(async () => { await api("DELETE", `/api/dev/apps/${enc(id)}/testers/${t.id}`); reload(); }) }, "Entfernen")))))
+        : h("p", { class: "muted" }, "Noch keine Tester.")));
+  }
+  nodes.push(card(h("h2", {}, "Bewertungen & Nachrichten"),
+    h("p", {}, "Bewertungen beantwortest du direkt auf der ", h("a", { href: "/app/" + enc(id) + "#reviews", target: "_blank" }, "Store-Seite"),
+      ", Nachrichten deiner Nutzer findest du unter ", h("a", { href: "#/nachrichten" }, "Nachrichten"), ".")));
+  render(...nodes);
+}, "entwickler", "developer");
+
+// --- Admin ------------------------------------------------------------------------
+function adminTabs(active) {
+  return h("div", { class: "tabs2" }, [["admin", "Übersicht"], ["admin/apps", "Apps"], ["admin/benutzer", "Benutzer"],
+    ["admin/kaeufe", "Käufe"], ["admin/kontakt", "Kontakt"], ["admin/rundmail", "Rundmail"]].map(([k, l]) =>
+    h("a", { href: "#/" + k, class: k === active ? "on" : "" }, l)));
+}
+
+on("/admin", async () => {
+  const [{ users }, { apps }, ov, { releases }] = await Promise.all([api("GET", "/api/admin/users"), api("GET", "/api/admin/apps"),
+    api("GET", "/api/admin/overview"), api("GET", "/api/admin/releases")]);
+  const reqs = users.filter(u => u.dev_requested), pending = apps.filter(a => a.review === "pending");
+  const warn = [];
+  if (!ov.mail_enabled) warn.push("E-Mail-Versand ist nicht eingerichtet (SMTP_* in der .env).");
+  if (ov.legal_missing.length) warn.push("Impressum unvollständig: " + ov.legal_missing.join(", "));
+  if (ov.contact_open) warn.push(`${ov.contact_open} offene Kontaktanfrage(n).`);
+  if (ov.withdrawals_open) warn.push(`${ov.withdrawals_open} offene(r) Widerruf(e) – siehe Käufe.`);
+  render(adminTabs("admin"),
+    card(h("h2", {}, "Übersicht"),
+      h("div", { class: "stats" }, h("div", {}, h("b", {}, ov.users), "Konten"), h("div", {}, h("b", {}, ov.developers), "Entwickler"),
+        h("div", {}, h("b", {}, ov.apps), "Apps"), h("div", {}, h("b", {}, ov.downloads_30d), "Downloads (30 T.)"),
+        h("div", {}, h("b", {}, money(ov.revenue_cents)), "Umsatz")),
+      warn.map(w => h("div", { class: "alert warn" }, w)),
+      h("p", { class: "muted" }, [ov.scanner_enabled ? "✓ Virenscan aktiv" : "Virenscan aus", ov.review_releases ? "✓ Versionsprüfung an" : "Versionsprüfung aus",
+        ov.payments_enabled ? "✓ Bezahlung eingerichtet" : "Bezahlung nicht eingerichtet", ov.push_enabled ? "✓ ntfy-Push" : "ntfy aus"].join(" · "))),
+    card(h("h2", {}, `Entwickler-Anfragen (${reqs.length})`),
+      reqs.length ? h("table", {}, reqs.map(u => h("tr", {}, h("td", {}, h("b", {}, u.username), h("div", { class: "muted" }, u.email)),
+        h("td", { class: "muted" }, u.dev_note || "–"),
+        h("td", {}, h("button", { class: "small", onclick: () => run(async () => { await api("POST", `/api/admin/users/${u.id}/developer`, { approve: true }); toast(u.username + " ist jetzt Entwickler"); route(); }) }, "Annehmen"), " ",
+          h("button", { class: "sec small", onclick: () => { const n = prompt("Begründung (optional)"); if (n !== null) run(async () => { await api("POST", `/api/admin/users/${u.id}/developer`, { approve: false, note: n }); route(); }); } }, "Ablehnen")))))
+        : h("p", { class: "muted" }, "Keine offenen Anfragen.")),
+    card(h("h2", {}, `Apps in Prüfung (${pending.length})`),
+      pending.length ? h("table", {}, pending.map(a => h("tr", {}, h("td", {}, h("a", { href: "#/entwickler/app/" + a.id + "?from=admin" }, h("b", {}, a.name)), h("div", { class: "muted" }, a.id)),
+        h("td", { class: "muted" }, (a.source_type === "upload" ? "Upload" : a.source_url) + " · " + (ver(a.stable) || ver(a.beta_version) || "noch keine Version")),
+        h("td", {}, h("button", { class: "small", onclick: () => run(async () => { await api("PUT", "/api/admin/apps/" + enc(a.id), { review: "approved" }); toast("Freigegeben"); route(); }) }, "Freigeben"), " ",
+          h("button", { class: "sec small", onclick: () => { const n = prompt("Begründung"); if (n !== null) run(async () => { await api("PUT", "/api/admin/apps/" + enc(a.id), { review: "rejected", review_note: n }); route(); }); } }, "Ablehnen")))))
+        : h("p", { class: "muted" }, "Nichts zu prüfen.")),
+    card(h("h2", {}, `Neue Versionen in Prüfung (${releases.length})`),
+      releases.length ? h("table", {}, releases.map(r => h("tr", {}, h("td", {}, h("b", {}, r.name + " " + ver(r.version)), h("div", { class: "muted" }, r.app + (r.channel === "beta" ? " · Beta" : ""))),
+        h("td", { class: "muted" }, (r.notes || "").slice(0, 140)),
+        h("td", {}, h("button", { class: "small", onclick: () => run(async () => { await api("POST", "/api/admin/releases/decide", { app: r.app, channel: r.channel, release_id: r.release_id, approve: true }); toast("Freigegeben"); route(); }) }, "Freigeben"), " ",
+          h("button", { class: "sec small", onclick: () => { const n = prompt("Begründung"); if (n !== null) run(async () => { await api("POST", "/api/admin/releases/decide", { app: r.app, channel: r.channel, release_id: r.release_id, approve: false, note: n }); route(); }); } }, "Ablehnen")))))
+        : h("p", { class: "muted" }, ov.review_releases ? "Nichts zu prüfen." : "Versionsprüfung ist aus (REVIEW_RELEASES=1 schaltet sie ein).")));
+}, "admin", "admin");
+
+on("/admin/apps", async () => {
+  const { apps, catalog_error } = await api("GET", "/api/admin/apps");
+  render(adminTabs("admin/apps"), card(h("div", { class: "row" }, h("h2", { style: "margin:0" }, `Alle Apps (${apps.length})`),
+      h("div", { class: "fit" }, h("button", { class: "sec", onclick: () => run(async () => { await api("GET", "/api/admin/apps?refresh=1"); toast("Neu von den Quellen geladen"); route(); }) }, "Quellen neu laden"))),
+    catalog_error ? h("div", { class: "alert err" }, "Forgejo: " + catalog_error) : null,
+    h("div", { class: "grid", style: "margin-top:14px" }, apps.map(a => { const c = appCard(a); c.onclick = () => go("#/entwickler/app/" + a.id + "?from=admin"); return c; }))));
+}, "admin", "admin");
+
+on("/admin/benutzer", async () => {
+  const { users } = await api("GET", "/api/admin/users");
+  const q = h("input", { placeholder: "Suchen …" });
+  const list = h("div");
+  const roles = { user: "Benutzer", developer: "Entwickler", admin: "Admin" };
+  const draw = () => list.replaceChildren(h("div", { class: "tablewrap" }, h("table", {}, users.filter(u => !q.value || u.username.toLowerCase().includes(q.value.toLowerCase()) || u.email.toLowerCase().includes(q.value.toLowerCase())).map(u =>
+    h("tr", {}, h("td", {}, h("b", {}, u.username + (u.id === me.id ? " (du)" : "")), h("div", { class: "muted" }, u.email + (u.email_verified ? " ✓" : "") + " · seit " + day(u.created_at) + (u.apps ? ` · ${u.apps} Apps` : "")),
+        u.dev_requested ? h("span", { class: "chip warn" }, "möchte Entwickler werden") : null,
+        u.unlocked.length ? h("div", {}, u.unlocked.map(x => h("span", { class: "chip", title: "Zugriff entziehen", style: "cursor:pointer",
+          onclick: () => confirm(`Zugriff auf ${x.name} für ${u.username} entziehen?`) && run(async () => { await api("DELETE", `/api/admin/users/${u.id}/unlocks/${enc(x.id)}`); route(); }) }, x.name + " ✕"))) : null),
+      h("td", {}, h("select", { onchange: ev => run(async () => { await api("PUT", `/api/admin/users/${u.id}`, { role: ev.target.value }); toast(`${u.username}: ${roles[ev.target.value]}`); route(); }) },
+        Object.entries(roles).map(([v, l]) => h("option", { value: v, selected: u.role === v }, l)))),
+      h("td", {}, u.id !== me.id ? h("button", { class: "danger small", onclick: () => confirm(`${u.username} löschen? Eigene Apps werden versteckt und von den Admins verwaltet.`) && run(async () => {
+        await api("DELETE", `/api/admin/users/${u.id}`); toast("Gelöscht"); route(); }) }, "Löschen") : null))))));
+  q.addEventListener("input", draw); draw();
+  render(adminTabs("admin/benutzer"), card(h("h2", {}, `Benutzer (${users.length})`), q, list));
+}, "admin", "admin");
+
+on("/admin/kaeufe", async () => {
+  const { purchases } = await api("GET", "/api/admin/purchases");
+  const status = { paid: "Bezahlt", withdrawal_requested: "Widerruf eingegangen", refunded: "Erstattet" };
+  render(adminTabs("admin/kaeufe"), card(h("h2", {}, "Käufe"), purchases.length ? h("div", { class: "tablewrap" }, h("table", {},
+    purchases.map(p => h("tr", {}, h("td", {}, h("b", {}, p.app_name), h("div", { class: "muted" }, "BD-" + String(p.id).padStart(6, "0"))),
+      h("td", {}, p.username, h("div", { class: "muted" }, p.email)), h("td", {}, p.price), h("td", {}, date(p.created_at)),
+      h("td", {}, p.status === "withdrawal_requested" ? h("span", { class: "chip err" }, status[p.status]) : status[p.status] || p.status),
+      h("td", {}, p.status !== "refunded" ? h("button", { class: "sec small", onclick: () => confirm(`${p.price} an ${p.username} erstatten?`) && run(async () => {
+        await api("POST", `/api/admin/purchases/${p.id}/refund`, {}); toast("Erstattet"); route(); }) }, "Erstatten") : null)))))
+    : h("p", { class: "muted" }, "Noch keine Käufe.")));
+}, "admin", "admin");
+
+on("/admin/kontakt", async () => {
+  const { messages } = await api("GET", "/api/admin/contact");
+  render(adminTabs("admin/kontakt"), card(h("h2", {}, "Kontaktanfragen"), messages.length ? messages.map(m => h("div", { style: "border-top:1px solid var(--border);padding:12px 0" + (m.status === "done" ? ";opacity:.6" : "") },
+    h("div", { style: "display:flex;gap:8px;flex-wrap:wrap;align-items:center" }, h("b", {}, m.subject), h("span", { class: "chip" }, m.topic_label),
+      m.status === "new" ? h("span", { class: "chip warn" }, "neu") : h("span", { class: "chip ok" }, "erledigt"), h("span", { class: "muted", style: "margin-left:auto" }, "K-" + String(m.id).padStart(5, "0") + " · " + date(m.created_at))),
+    h("div", { class: "muted" }, m.name + " · ", h("a", { href: `mailto:${m.email}?subject=${encodeURIComponent("Re: " + m.subject)}` }, m.email)),
+    h("div", { style: "white-space:pre-wrap;margin:8px 0" }, m.body),
+    h("button", { class: "sec small", onclick: () => run(async () => { await api("PUT", "/api/admin/contact/" + m.id, { status: m.status === "new" ? "done" : "new" }); route(); }) },
+      m.status === "new" ? "Als erledigt markieren" : "Wieder öffnen"))) : h("p", { class: "muted" }, "Keine Anfragen.")));
+}, "admin", "admin");
+
+on("/admin/rundmail", async () => {
+  const subject = h("input"), message = h("textarea", { style: "min-height:200px" });
+  render(adminTabs("admin/rundmail"), card(h("h2", {}, "Rundmail"),
+    h("p", { class: "muted" }, "Geht an alle mit bestätigter E-Mail oder ntfy, die „Neuigkeiten“ eingeschaltet haben. Absätze mit Leerzeile trennen."),
+    field("Betreff", subject), field("Nachricht", message),
+    h("button", { style: "margin-top:12px", onclick: () => confirm("Rundmail jetzt senden?") && run(async () => {
+      const r = await api("POST", "/api/admin/announce", { subject: subject.value, message: message.value }); toast(`An ${r.recipients} Empfänger gesendet`); subject.value = message.value = ""; }) }, "Senden")));
+}, "admin", "admin");
+
+route();
+</script>
+</body>
+</html>

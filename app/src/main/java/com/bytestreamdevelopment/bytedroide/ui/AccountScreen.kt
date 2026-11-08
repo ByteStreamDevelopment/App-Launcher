@@ -161,6 +161,9 @@ private fun Profile(user: UserInfo, state: UiState, vm: StoreViewModel, open: (A
     if (user.isAdmin) {
         OutlinedButton(onClick = { vm.navigate(Screen.Admin) }, modifier = Modifier.fillMaxWidth()) { Text("Admin-Bereich") }
     }
+    OutlinedButton(onClick = { vm.navigate(Screen.Messages) }, modifier = Modifier.fillMaxWidth()) {
+        Text(if (state.unreadMessages > 0) "Nachrichten (${state.unreadMessages} neu)" else "Nachrichten")
+    }
     OutlinedButton(onClick = { vm.navigate(Screen.Purchases) }, modifier = Modifier.fillMaxWidth()) { Text("Meine Käufe") }
 
     HorizontalDivider()

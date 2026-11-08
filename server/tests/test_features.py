@@ -281,8 +281,8 @@ class StorefrontTest(FeatureCase):
         self.assertIn("Mein Spiel", page)
         self.assertIn("&lt;b&gt;fett", page)  # escaped
         self.assertIn("<svg", page)  # QR für /download
-        self.assertIn("Mein Spiel", self.call("GET", "/?kategorie=Spiele", raw=True)[1].decode())
-        self.assertNotIn("Mein Spiel</div>", self.call("GET", "/?q=gibtsnicht", raw=True)[1].decode())
+        self.assertIn("Mein Spiel", self.call("GET", "/apps?kategorie=Spiele", raw=True)[1].decode())
+        self.assertNotIn("Mein Spiel</div>", self.call("GET", "/apps?q=gibtsnicht", raw=True)[1].decode())
         status, page = self.call("GET", "/app/anna/spiel", raw=True)
         page = page.decode()
         self.assertIn("APK direkt laden", page)
@@ -348,3 +348,118 @@ class ClamdProtocolTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------------------
+# Runde 2: Reihenfolge, Nachrichten, Kontakt, Web-Seiten
+# ---------------------------------------------------------------------------
+
+class ScreenshotOrderTest(FeatureCase):
+    def test_reihenfolge(self):
+        self.upload_app()
+        for i in range(3):
+            self.call("POST", "/api/dev/apps/anna/spiel/screenshots", data=PNG + bytes([i]), token=self.dev)
+        ids = [s["id"] for s in self.call("GET", "/api/dev/apps/anna/spiel", token=self.dev)[1]["screenshots"]]
+        status, r = self.call("PUT", "/api/dev/apps/anna/spiel/screenshots", {"order": ids[::-1]}, self.dev)
+        self.assertEqual([s["id"] for s in r["screenshots"]], ids[::-1])
+        urls = self.apps()["anna/spiel"]["screenshots"]
+        self.assertTrue(urls[0].endswith(f"/{ids[2]}"))
+        self.assertEqual(self.call("PUT", "/api/dev/apps/anna/spiel/screenshots", {"order": ids[:2]}, self.dev)[0], 400)
+        other = self.developer(self.admin_tok, "carl")
+        self.assertEqual(self.call("PUT", "/api/dev/apps/anna/spiel/screenshots", {"order": ids}, other)[0], 403)
+
+
+class ThreadTest(FeatureCase):
+    def test_nachrichten(self):
+        self.upload_app()
+        user = self.register("bert")["token"]
+        self.verify("bert@example.org")
+        self.assertEqual(self.call("POST", "/api/apps/anna/spiel/threads", {"kind": "bug", "subject": "",
+                                                                             "message": "x"}, user)[0], 400)
+        status, t = self.call("POST", "/api/apps/anna/spiel/threads",
+                              {"kind": "bug", "subject": "Absturz beim Start", "message": "Stürzt sofort ab",
+                               "device": "Pixel 7 · Android 14 · App 1.0.0"}, user)
+        self.assertEqual((status, t["role"], len(t["messages"])), (200, "user", 1))
+        mail = self.mail.to("anna@example.org")[-1]
+        self.assertIn("Absturz beim Start", mail["subject"])
+        self.assertIn("Pixel 7", mail["text"])
+        self.assertIn(f"/konto#/nachrichten/{t['id']}", mail["text"])
+        # Entwickler sieht ungelesene Nachricht und antwortet
+        r = self.call("GET", "/api/threads", token=self.dev)[1]
+        self.assertEqual((r["unread"], r["threads"][0]["role"], r["threads"][0]["with"]), (1, "dev", "bert"))
+        self.assertEqual(self.call("GET", "/api/apps", token=self.dev)[1]["unread_messages"], 1)
+        status, t2 = self.call("POST", f"/api/threads/{t['id']}/messages", {"message": "Danke, ist behoben!"}, self.dev)
+        self.assertTrue(t2["messages"][-1]["from_dev"])
+        self.assertEqual(self.call("GET", "/api/threads", token=self.dev)[1]["unread"], 0)
+        self.assertIn("Antwort zu", self.mail.to("bert@example.org")[-1]["subject"])
+        self.assertEqual(self.call("GET", "/api/threads", token=user)[1]["unread"], 1)
+        self.call("GET", f"/api/threads/{t['id']}", token=user)
+        self.assertEqual(self.call("GET", "/api/threads", token=user)[1]["unread"], 0)
+        # Fremde sehen das Gespräch nicht, eigene App geht nicht
+        other = self.register("carl")["token"]
+        self.assertEqual(self.call("GET", f"/api/threads/{t['id']}", token=other)[0], 404)
+        self.assertEqual(self.call("POST", "/api/apps/anna/spiel/threads", {"subject": "x", "message": "y"},
+                                   self.dev)[0], 400)
+        # schließen und durch Antwort wieder öffnen
+        self.assertEqual(self.call("PUT", f"/api/threads/{t['id']}", {"status": "closed"}, user)[1]["status"], "closed")
+        self.assertEqual(self.call("POST", f"/api/threads/{t['id']}/messages", {"message": "Doch nicht"},
+                                   user)[1]["status"], "open")
+
+    def test_admin_betreut_apps_ohne_entwickler(self):
+        user = self.register("bert")["token"]
+        self.call("POST", "/api/apps/Manhunt/manhunt/threads", {"kind": "question", "subject": "Frage",
+                                                                "message": "Wie geht das?"}, user)
+        self.assertTrue(any("Frage" in m["subject"] for m in self.mail.to("chef@example.org")))
+        self.assertEqual(self.call("GET", "/api/threads", token=self.admin_tok)[1]["unread"], 1)
+        self.assertEqual(self.call("GET", "/api/threads", token=self.dev)[1]["threads"], [])
+
+
+class ContactTest(FeatureCase):
+    env = {"OPERATOR_EMAIL": "betreiber@example.org"}
+
+    def test_kontaktformular(self):
+        body = {"name": "Erika", "email": "erika@example.org", "topic": "meldung", "subject": "Schadsoftware?",
+                "message": "Die App XY verhält sich seltsam.", "privacy": True}
+        self.assertEqual(self.call("POST", "/api/contact", dict(body, privacy=False))[0], 400)
+        self.assertEqual(self.call("POST", "/api/contact", dict(body, message="kurz"))[0], 400)
+        status, r = self.call("POST", "/api/contact", body)
+        self.assertEqual(status, 200)
+        self.assertIn("Schadsoftware?", self.mail.to("betreiber@example.org")[-1]["subject"])
+        self.assertIn("erhalten", self.mail.to("erika@example.org")[-1]["subject"])
+        # Honigtopf: wird still verworfen
+        n = len(self.mail.sent)
+        self.assertEqual(self.call("POST", "/api/contact", dict(body, website="spam.example"))[0], 200)
+        self.assertEqual(len(self.mail.sent), n)
+        msgs = self.call("GET", "/api/admin/contact", token=self.admin_tok)[1]["messages"]
+        self.assertEqual((len(msgs), msgs[0]["topic_label"]), (1, "Rechtswidrigen Inhalt melden"))
+        self.call("PUT", f"/api/admin/contact/{msgs[0]['id']}", {"status": "done"}, self.admin_tok)
+        self.assertEqual(self.call("GET", "/api/admin/overview", token=self.admin_tok)[1]["contact_open"], 0)
+        # HTML-Formular
+        import urllib.parse
+        req = urllib.request.Request(self.base + "/kontakt", method="POST", data=urllib.parse.urlencode(
+            {**body, "privacy": "1", "email": "max@example.org"}).encode())
+        with urllib.request.urlopen(req) as resp:
+            self.assertIn("Danke", resp.read().decode())
+        # Bremse: höchstens 5 pro Stunde und IP
+        for _ in range(5):
+            self.call("POST", "/api/contact", body)
+        self.assertEqual(self.call("POST", "/api/contact", body)[0], 429)
+
+
+class WebPagesTest(FeatureCase):
+    def test_seiten(self):
+        self.upload_app(category="Spiele")
+        for path, text in [("/", "Warum ByteDroide"), ("/apps", "Mein Spiel"), ("/apps?sortierung=neu", "Mein Spiel"),
+                           ("/hilfe", "Hilfe"), ("/hilfe/entwickler", "Entwickler"), ("/hilfe/ci", "curl"),
+                           ("/hilfe/gibtsnicht", "nicht gefunden"), ("/kontakt", "Nachricht senden"),
+                           ("/konto", "Mein Konto"), ("/app/anna/spiel", "Fehler gefunden")]:
+            status, page = self.call("GET", path, raw=True)
+            self.assertEqual(status, 200, path)
+            self.assertIn(text, page.decode(), path)
+        status, js = self.call("GET", "/static/store.js", raw=True)
+        self.assertEqual(status, 200)
+        self.assertEqual(self.call("GET", "/static/../store_server.py", raw=True)[0], 404)
+        self.assertEqual(self.call("GET", "/static/fehlt.js", raw=True)[0], 404)
+        status, view = self.call("GET", "/api/apps/anna/spiel")
+        self.assertEqual((status, view["id"]), (200, "anna/spiel"))
+        self.assertEqual(self.call("GET", "/portal", raw=True)[0], 200)  # Weiterleitung auf /konto

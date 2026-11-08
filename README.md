@@ -45,6 +45,23 @@ zurückgestuft noch gelöscht werden.
 **App-Prüfung**: Neue Apps von Entwicklern sind erst sichtbar, wenn ein Admin sie freigibt
 (Entwickler bekommt eine E-Mail, bei Ablehnung mit Begründung).
 
+## Im Browser
+
+ByteDroide funktioniert vollständig auch im Browser – bis auf das automatische Installieren/Aktualisieren:
+
+| Adresse | Inhalt |
+|---|---|
+| `/` | Startseite mit „Neu“, „Beliebt“, Kategorien, Funktionen und FAQ |
+| `/apps` | Katalog mit Suche, Kategorien und Sortierung |
+| `/app/{id}` | App-Seite: Screenshots, Bewertungen, QR-Code; angemeldet: herunterladen, kaufen, Code einlösen, Beta, bewerten, Entwickler kontaktieren |
+| `/konto` | Web-App: Anmelden/Registrieren, Konto, Käufe & Widerruf, Nachrichten, Entwickler-Bereich (Apps, Uploads, Screenshots sortieren, Codes, Tester, API-Schlüssel) und Admin-Bereich (Anfragen, Apps, Benutzer, Käufe, Kontaktanfragen, Rundmail) |
+| `/hilfe` | Dokumentation für Nutzer, Entwickler und Betreiber |
+| `/kontakt` | Kontaktformular (mit Spam-Schutz; Mail an Betreiber/Admins, Bestätigung an den Absender) |
+
+**Nachrichten an Entwickler**: Nutzer melden Fehler, geben Feedback oder stellen Fragen – aus der App (mit
+Geräteinfos) oder im Browser. Entwickler antworten, beide Seiten bekommen Benachrichtigungen (E-Mail/ntfy), Gespräche
+lassen sich als erledigt markieren. Bei Apps ohne Entwickler antworten die Admins.
+
 ## Web-Store, Bewertungen & mehr
 
 - **Web-Store im Browser** unter `https://apps.nebendahl.eu/`: Katalog mit Suche und Kategorien, App-Seiten mit
@@ -54,7 +71,7 @@ zurückgestuft noch gelöscht werden.
   QR-Code direkt ByteDroide (Android App Links).
 - **Bewertungen**: 1–5 Sterne mit Text, nur wer die App über ByteDroide geladen hat; Entwickler können antworten,
   Admins moderieren. Durchschnitt erscheint in der App-Liste und im Web-Store.
-- **Screenshots**: bis zu 8 pro App (App, Portal oder `POST /api/dev/apps/{id}/screenshots`).
+- **Screenshots**: bis zu 8 pro App, Reihenfolge per Pfeil änderbar (App, Web oder `POST`/`PUT /api/dev/apps/{id}/screenshots`).
 - **Push über ntfy** (ohne Google): Konto → „Push über ntfy“ erzeugt ein geheimes Thema, das man in der ntfy-App
   abonniert. Alle Benachrichtigungen (Updates, Freigaben, Antworten …) kommen dann zusätzlich als Push.
 - **Gestaffelte Rollouts**: Beim Upload (stabiler Kanal) z. B. erst 10 % der Nutzer; später auf 100 % erhöhen.
@@ -163,7 +180,7 @@ Tests: `python3 -m unittest discover -s server/tests`
 
 ### Automatisch aus CI veröffentlichen
 
-Im Portal (`/portal`) einen API-Schlüssel erstellen und als Secret hinterlegen, dann z. B. in GitHub Actions:
+Unter `/konto#/entwickler` einen API-Schlüssel erstellen und als Secret hinterlegen, dann z. B. in GitHub Actions:
 
 ```yaml
 - name: In ByteDroide veröffentlichen

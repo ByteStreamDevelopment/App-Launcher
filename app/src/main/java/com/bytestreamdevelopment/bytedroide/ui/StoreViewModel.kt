@@ -11,6 +11,8 @@ import com.bytestreamdevelopment.bytedroide.data.Catalog
 import com.bytestreamdevelopment.bytedroide.data.InstallState
 import com.bytestreamdevelopment.bytedroide.data.Purchase
 import com.bytestreamdevelopment.bytedroide.data.ReviewList
+import com.bytestreamdevelopment.bytedroide.data.ThreadDetail
+import com.bytestreamdevelopment.bytedroide.data.ThreadSummary
 import com.bytestreamdevelopment.bytedroide.data.StoreApp
 import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 import com.bytestreamdevelopment.bytedroide.data.UserInfo
@@ -45,6 +47,8 @@ sealed interface Screen {
     data object DevCreate : Screen
     data class DevApp(val fullName: String) : Screen
     data class Codes(val fullName: String) : Screen
+    data object Messages : Screen
+    data class Thread(val id: Long) : Screen
 }
 
 enum class Tab { Discover, Updates, Installed }
@@ -73,6 +77,9 @@ data class UiState(
     val reviews: Map<String, ReviewList> = emptyMap(),
     /** Adresse des ntfy-Themas (nach dem Einschalten zum Abonnieren) */
     val ntfyUrl: String = "",
+    val threads: List<ThreadSummary> = emptyList(),
+    val thread: ThreadDetail? = null,
+    val unreadMessages: Int = 0,
     val busy: Boolean = false,
 ) {
     val screen: Screen get() = stack.last()
@@ -111,7 +118,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
                 val result = catalog.load()
                 apps = result.apps
                 _state.update {
-                    it.copy(entries = catalog.entries(apps), user = result.user, loading = false, loadedOnce = true)
+                    it.copy(entries = catalog.entries(apps), user = result.user, unreadMessages = result.unreadMessages,
+                        loading = false, loadedOnce = true)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -302,6 +310,55 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         loadReviews(fullName)
         refresh()
     }) { api().adminDeleteReview(fullName, userId) }
+
+    // --- Nachrichten an Entwickler ---------------------------------------------------
+
+    fun loadThreads() = viewModelScope.launch {
+        runCatching { withContext(Dispatchers.IO) { api().threads() } }
+            .onSuccess { (list, unread) -> _state.update { it.copy(threads = list, unreadMessages = unread) } }
+            .onFailure { toast(it.message ?: "Fehler") }
+    }
+
+    fun openThread(id: Long) = viewModelScope.launch {
+        if (_state.value.thread?.id != id) _state.update { it.copy(thread = null) }
+        runCatching { withContext(Dispatchers.IO) { api().thread(id) to api().threads() } }
+            .onSuccess { (t, list) ->
+                _state.update { it.copy(thread = t, threads = list.first, unreadMessages = list.second) }
+            }
+            .onFailure { toast(it.message ?: "Fehler") }
+    }
+
+    fun sendMessage(id: Long, text: String) = action {
+        val t = api().postMessage(id, text.trim())
+        _state.update { it.copy(thread = t) }
+    }
+
+    fun setThreadStatus(id: Long, closed: Boolean) = action(if (closed) "Als erledigt markiert" else "Wieder geöffnet") {
+        val t = api().setThreadStatus(id, if (closed) "closed" else "open")
+        _state.update { it.copy(thread = t) }
+    }
+
+    /** Neues Gespräch mit dem Entwickler; bei Fehlermeldungen mit Geräteangaben. */
+    fun contactDeveloper(entry: AppEntry, kind: String, subject: String, message: String, withDevice: Boolean) {
+        if (!requireLogin("Zum Schreiben bitte anmelden")) return
+        val device = if (withDevice) deviceInfo(entry) else ""
+        action("Gesendet – der Entwickler bekommt eine Benachrichtigung") {
+            val t = api().createThread(entry.app.fullName, kind, subject.trim(), message.trim(), device)
+            _state.update { it.copy(thread = t) }
+            viewModelScope.launch { navigate(Screen.Thread(t.id)) }
+        }
+    }
+
+    fun deviceInfo(entry: AppEntry): String {
+        val installed = when (val s = entry.state) {
+            is InstallState.UpToDate -> s.installedVersion
+            is InstallState.UpdateAvailable -> s.installedVersion
+            InstallState.NotInstalled -> "nicht installiert"
+        }
+        return "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL} · Android ${android.os.Build.VERSION.RELEASE} " +
+            "(API ${android.os.Build.VERSION.SDK_INT}) · App-Version $installed · " +
+            "ByteDroide ${com.bytestreamdevelopment.bytedroide.BuildConfig.VERSION_NAME}"
+    }
 
     // --- Push über ntfy -------------------------------------------------------
 
