@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.data
+package com.bytestreamdevelopment.bytedroide.data
 
 import android.content.Context
 import androidx.core.content.edit

@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.install
+package com.bytestreamdevelopment.bytedroide.install
 
 import android.content.BroadcastReceiver
 import android.content.Context

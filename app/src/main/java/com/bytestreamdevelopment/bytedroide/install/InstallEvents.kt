@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.install
+package com.bytestreamdevelopment.bytedroide.install
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow

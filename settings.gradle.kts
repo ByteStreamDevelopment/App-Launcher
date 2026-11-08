@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "App-Launcher"
+rootProject.name = "ByteDroide"
 include(":app")

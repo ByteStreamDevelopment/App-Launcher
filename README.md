@@ -1,40 +1,82 @@
 # ByteDroide
 
-ByteDroide ist ein eigener kleiner App Store für Android, der deine selbst gebauten Apps von deinem
-Forgejo-Server (**https://git.nebendahl.eu**) installiert und aktuell hält – mit Admin-Bereich,
-Einmal-Codes und Benutzerverwaltung.
+ByteDroide ist ein eigener App-Store für Android: Entwicklerinnen und Entwickler veröffentlichen ihre Apps
+(aus GitHub/Forgejo oder per APK-Upload), Nutzer installieren und aktualisieren sie mit einem Tipp – mit
+Beta-Kanal, Freischalt-Codes, kostenpflichtigen Apps, E-Mail-Benachrichtigungen und vollständigen Rechtstexten.
 
 ```
-Android-App  ──►  Store-Server (server/)  ──►  Forgejo (git.nebendahl.eu)
-                  Benutzer, Admins, Freigaben,
-                  Einmal-Codes, APK-Downloads
+Android-App  ──►  Store-Server (server/)  ──►  GitHub · Forgejo/Gitea · hochgeladene APKs
+Entwickler-Portal (Browser) ─┘   Konten, Rollen, Freigaben, Codes, Käufe (Stripe), E-Mails (SMTP)
 ```
 
-## Was er kann
+## Funktionen
 
-- **Entdecken**: Jedes Repo, dessen **neuestes Release** eine `.apk` enthält, erscheint automatisch.
-- **Installieren / Aktualisieren / Öffnen / Deinstallieren** mit einem Tipp, „Alle aktualisieren“.
-- **Updates**: Release-Tag (`v2.5.0`) wird mit der installierten Version (`2.5.0`) verglichen;
-  Hintergrund-Prüfung alle 6 Stunden mit Benachrichtigung.
-- **Konten**: Anmelden/Registrieren. Ohne Konto sind alle offenen Apps nutzbar.
-- **Admin-Bereich** (nur für Admins):
-  - pro App die Freigabe wählen: **Offen** (jeder), **Mit Code** (nur nach Einlösen eines Einmal-Codes),
-    **Versteckt** (nur Admins)
-  - **Einmal-Codes** erzeugen (mit Notiz, z. B. „für Anna“), teilen, kopieren, löschen, sehen wer sie eingelöst hat
-  - **Benutzerverwaltung**: andere zu Admins machen/zurückstufen, Konten löschen, Freischaltungen entziehen
-- **Haupt-Admin** ist `ProfImpossible`. Dieses Konto lässt sich nur mit dem **Admin-Passwort** registrieren,
-  kann nie zurückgestuft oder gelöscht werden.
+**Für alle**
+- Apps entdecken (Suche, Kategorien), installieren, aktualisieren, öffnen, deinstallieren, „Alle aktualisieren“
+- Update-Prüfung im Hintergrund (alle 6 Stunden) mit Benachrichtigung
+- Ohne Konto nutzbar für alle offenen, kostenlosen Apps
 
-## Einmal-Codes – so funktioniert's
+**Mit Konto**
+- Registrierung mit E-Mail-Bestätigung, „Passwort vergessen“, Passwort/E-Mail ändern
+- Freischalt-Codes einlösen, Apps kaufen, Beta-Tester werden
+- E-Mail-Benachrichtigungen (ein-/ausschaltbar): Updates genutzter Apps, Neuigkeiten
+- Meine Käufe inkl. **„Vertrag widerrufen“**, Daten exportieren, Konto selbst löschen (DSGVO)
 
-1. Admin stellt eine App auf **Mit Code** und erzeugt einen Code (z. B. `K7QM-3XPA`).
-2. Code an die Person schicken (Teilen-Knopf).
-3. Die Person registriert sich in der App und tippt bei der App auf **Code** (oder Konto → „Freischalt-Code einlösen“).
-4. Der Code ist danach verbraucht; die App bleibt für dieses Konto **dauerhaft** freigeschaltet, inkl. Updates.
+**Rollen**
+| Rolle | Wie | Darf |
+|---|---|---|
+| Benutzer | normale Registrierung | Apps nutzen, kaufen, testen |
+| Entwickler | bei der Registrierung (oder später im Konto) beantragen, **Admin gibt frei** | eigene Apps veröffentlichen und verwalten |
+| Admin | **das erste registrierte Konto** – danach ernennen Admins weitere Admins | alles: Rollen, Anfragen, App-Prüfung, Käufe, Rundmails |
 
-> **Wichtig:** Ist das Repo auf Forgejo **öffentlich**, kann jeder die APK dort direkt herunterladen.
-> Für echten Schutz das Repo auf **privat** stellen und dem Store-Server einen Forgejo-Token geben –
-> dann kommt man nur noch über den Store (und mit Code) an die APK.
+Es gibt **keine fest eingebauten Admin-Konten oder Passwörter** mehr. Der letzte Admin kann weder
+zurückgestuft noch gelöscht werden.
+
+**Für Entwickler** (in der App unter Konto → Entwickler-Bereich oder im Browser unter `/portal`)
+- App anlegen mit **Quelle** (GitHub, Forgejo, Gitea, Codeberg – auch private Repos per Token) **oder Upload**
+- APK hochladen: Paketname, `versionName` und `versionCode` werden aus der APK gelesen und geprüft
+  (falsche App, falsche Version oder nicht steigender `versionCode` werden abgelehnt)
+- Kanäle **Stabil** und **Beta** (bei Quellen: Pre-Releases = Beta); Beta-Programm offen oder nur auf Einladung
+- Freigabe: offen / nur mit Code / versteckt; **Preis** (0,50 €–1000 €); Icon, Kategorie, Webseite
+- Freischalt-Codes (wirken bei Kauf-Apps als Gutschein), Beta-Tester einladen
+- Statistik: Downloads, 30 Tage, Verkäufe, Umsatz
+- **API-Schlüssel** für automatische Uploads aus CI
+
+**App-Prüfung**: Neue Apps von Entwicklern sind erst sichtbar, wenn ein Admin sie freigibt
+(Entwickler bekommt eine E-Mail, bei Ablehnung mit Begründung).
+
+## E-Mails
+
+Alle Mails sind als schönes HTML (mit Text-Alternative) gestaltet und enthalten Impressum-/Datenschutz-Links:
+E-Mail bestätigen · Passwort zurücksetzen · Passwort/E-Mail geändert · Entwickler-Anfrage (an Admins) ·
+Entwickler freigeschaltet/abgelehnt · Rolle geändert · neue App zur Prüfung (an Admins) · App freigegeben/abgelehnt ·
+neue Version (an Nutzer der App, wenn eingeschaltet) · neue Beta (an Tester) · Beta-Einladung ·
+Kaufbeleg · Verkauf (an Entwickler) · Widerruf-Eingangsbestätigung (an Käufer und Betreiber) · Erstattung ·
+Konto gelöscht · Rundmails der Admins (nur an Abonnenten von „Neuigkeiten“).
+
+Ohne `SMTP_HOST` läuft alles weiter, Mails werden dann nur ins Log geschrieben.
+
+## Kostenpflichtige Apps
+
+- Bezahlung über **Stripe Checkout** (Karte, PayPal, Apple/Google Pay … je nach Stripe-Einstellung).
+  Die App öffnet die Bezahlseite im Browser, Stripe meldet die Zahlung per Webhook, die App wird sofort freigeschaltet.
+- Vor dem Kauf stimmt der Käufer der sofortigen Bereitstellung zu (Erlöschen des Widerrufsrechts, § 356 Abs. 5 BGB);
+  der Kaufbeleg per E-Mail ist die Vertragsbestätigung auf dauerhaftem Datenträger.
+- **Widerrufsfunktion**: In der App unter Konto → Meine Käufe → „Vertrag widerrufen“ (14 Tage), mit sofortiger
+  Eingangsbestätigung per E-Mail. Admins erstatten im Admin-Bereich → Käufe (Rückzahlung über die Stripe-API).
+- Ohne Stripe-Schlüssel funktionieren Kauf-Apps nur über Codes (Gutscheine).
+
+> Wer Apps verkauft, handelt in der Regel gewerblich (Gewerbeanmeldung, Steuern, ggf. Kleinunternehmerregelung).
+> Die mitgelieferten Rechtstexte sind eine sorgfältige Vorlage, ersetzen aber keine Rechtsberatung.
+
+## Rechtstexte
+
+Der Server liefert `/impressum`, `/datenschutz`, `/agb` (Nutzungsbedingungen inkl. Entwickler- und Kaufbedingungen)
+und `/widerruf` (Widerrufsbelehrung + Muster-Formular). Die App verlinkt sie unter Einstellungen → Rechtliches,
+bei der Registrierung und beim Kauf; die Mails im Fußbereich.
+
+Die Betreiberangaben kommen aus der `.env` (`OPERATOR_*`). **Fehlende Pflichtangaben werden auf der Seite rot
+markiert** und im Admin-Bereich angezeigt.
 
 ## Store-Server einrichten
 
@@ -42,85 +84,99 @@ Liegt in [`server/`](server/), nur Python-Standardbibliothek + SQLite, am einfac
 
 ```bash
 cd server
-cp .env.example .env      # nur FORGEJO_TOKEN eintragen
+cp .env.example .env      # Betreiberdaten, SMTP, Forgejo-Token, optional Stripe eintragen
 docker compose up -d --build
 ```
 
-Der Server läuft dann auf Port `8080`. Die App erwartet ihn fest unter **`https://apps.nebendahl.eu`** –
-also im Reverse-Proxy `apps.nebendahl.eu` → `http://localhost:8080` eintragen und in `.env` `TRUST_PROXY=1` setzen.
+Der Server läuft auf Port `8080`. Die App erwartet ihn fest unter **`https://apps.nebendahl.eu`** – im Reverse-Proxy
+`apps.nebendahl.eu` → `http://localhost:8080` eintragen und `TRUST_PROXY=1` setzen.
 
-Das **Admin-Passwort ist fest im Server eingebaut** (nur als scrypt-Hash `ADMIN_PASSWORD_HASH` in `store_server.py`)
-und steht nicht in der `.env`. Ändern: neuen Hash erzeugen
-(`python3 -c "import store_server as s; print(s.hash_password('NEU'))"`) und dort eintragen.
-Die Datenbank liegt in `server/data/store.db` (Backup = diese Datei kopieren).
+**Erste Schritte:** App installieren → Konto → Registrieren. Das **erste Konto wird automatisch Admin.**
+
+Daten liegen in `server/data/` (`store.db` + `files/` mit hochgeladenen APKs und Icons) – Backup = Ordner kopieren.
+Eine bestehende Datenbank aus Version 1.x wird beim Start automatisch übernommen (Admins bleiben Admins).
 
 | Variable | Bedeutung |
 |---|---|
-| `FORGEJO_URL` | Forgejo-Adresse, Standard `https://git.nebendahl.eu` |
-| `FORGEJO_TOKEN` | Token mit `read:repository` – nötig für private Repos |
-| `ADMIN_USERNAME` | Haupt-Admin, Standard `ProfImpossible` |
-| `OWNERS` | optional: nur Repos dieser Benutzer/Orgs (kommagetrennt) |
-| `DEFAULT_ACCESS` | Freigabe neu entdeckter Apps: `open`, `code` oder `hidden` |
-| `TRUST_PROXY` | `1` hinter Reverse-Proxy (echte IP für die Fehlversuch-Bremse) |
+| `PUBLIC_URL` | öffentliche Adresse (Links in Mails, Rechtstexte), Standard `https://apps.nebendahl.eu` |
+| `OPERATOR_NAME`, `_STREET`, `_CITY`, `_EMAIL` | **Pflicht** für Impressum/Datenschutz |
+| `OPERATOR_PHONE`, `_VAT_ID`, `_RESPONSIBLE`, `_HOSTING`, `_MAIL_PROVIDER`, `_AUTHORITY`, `KLEINUNTERNEHMER` | optional |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | E-Mail-Versand |
+| `FORGEJO_URL`, `FORGEJO_TOKEN` | Forgejo-Server und Token (`read:repository`) |
+| `FORGEJO_AUTO_IMPORT` | `1` = alle Forgejo-Repos mit APK-Release automatisch als Admin-Apps übernehmen |
+| `OWNERS` | optional: nur Repos dieser Benutzer/Orgs importieren |
+| `DEFAULT_ACCESS` | Freigabe neu importierter Apps: `open`, `code`, `hidden` |
+| `GITHUB_TOKEN` | optional, höheres Abruf-Limit bei GitHub-Quellen |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CURRENCY` | Bezahlung (Webhook: `https://…/api/stripe/webhook`) |
+| `MAX_UPLOAD_MB` | maximale APK-Größe (Standard 200) |
+| `STORE_APP_ID` | App, die unter `/download` angeboten wird (z. B. ByteDroide selbst) |
+| `TRUST_PROXY` | `1` hinter Reverse-Proxy |
 
 Ohne Docker: `cd server && python3 store_server.py`
 
 Tests: `python3 -m unittest discover -s server/tests`
 
-### Erste Schritte nach dem Start
+### Stripe einrichten (optional)
 
-1. App installieren (die Server-Adresse ist schon eingebaut).
-2. Konto → **Registrieren** mit Benutzername `ProfImpossible`, eigenem Passwort und dem **Admin-Passwort**.
-3. Oben erscheint das Werkzeug-Symbol → Admin-Bereich.
+1. Im Stripe-Dashboard den geheimen Schlüssel als `STRIPE_SECRET_KEY` eintragen.
+2. Webhook anlegen: URL `https://apps.nebendahl.eu/api/stripe/webhook`, Ereignisse
+   `checkout.session.completed` und `checkout.session.async_payment_succeeded`; das Signing-Secret als
+   `STRIPE_WEBHOOK_SECRET` eintragen.
 
-### Server-API (Kurzfassung)
+### Automatisch aus CI veröffentlichen
+
+Im Portal (`/portal`) einen API-Schlüssel erstellen und als Secret hinterlegen, dann z. B. in GitHub Actions:
+
+```yaml
+- name: In ByteDroide veröffentlichen
+  run: |
+    curl --fail -X POST -H "Authorization: Bearer ${{ secrets.BYTEDROIDE_KEY }}" \
+      --data-binary @app/build/outputs/apk/release/app-release.apk \
+      "https://apps.nebendahl.eu/api/dev/apps/NAME/APP/releases?channel=stable"
+```
+
+## Server-API (Kurzfassung)
 
 | Methode & Pfad | Wer | Zweck |
 |---|---|---|
-| `POST /api/register`, `POST /api/login`, `POST /api/logout`, `GET /api/me` | alle | Konto |
-| `GET /api/apps` | alle | Katalog (für den Benutzer gefiltert) |
-| `GET /api/apps/{owner}/{repo}/download?asset=` | Berechtigte | APK |
-| `POST /api/redeem` | angemeldet | Einmal-Code einlösen |
-| `GET /api/admin/apps`, `PUT /api/admin/apps/{owner}/{repo}` | Admin | Apps & Freigabe |
-| `GET/POST /api/admin/apps/{owner}/{repo}/codes`, `DELETE /api/admin/codes/{code}` | Admin | Codes |
-| `GET /api/admin/users`, `PUT/DELETE /api/admin/users/{id}`, `DELETE /api/admin/users/{id}/unlocks/{owner}/{repo}` | Admin | Benutzer |
+| `POST /api/register`, `/api/login`, `/api/logout`, `/api/password/forgot` | alle | Konto |
+| `GET/PUT/DELETE /api/me`, `POST /api/me/password`, `/api/me/verify`, `/api/me/developer`, `GET /api/me/export` | angemeldet | eigenes Konto |
+| `GET /api/me/purchases`, `POST /api/me/purchases/{id}/withdraw` | angemeldet | Käufe, Widerruf |
+| `GET /api/apps`, `GET /api/apps/{id}/download`, `GET /api/apps/{id}/icon` | alle | Katalog, APK, Icon |
+| `POST/DELETE /api/apps/{id}/beta`, `POST /api/apps/{id}/purchase`, `POST /api/redeem` | angemeldet | Beta, Kauf, Code |
+| `GET/POST /api/dev/apps`, `GET/PUT/DELETE /api/dev/apps/{id}` | Entwickler | eigene Apps |
+| `GET/POST /api/dev/apps/{id}/releases`, `DELETE …/releases/{rid}`, `POST …/icon` | Entwickler | Versionen, Icon |
+| `…/codes`, `…/testers`, `GET/POST/DELETE /api/dev/keys` | Entwickler | Codes, Tester, API-Schlüssel |
+| `GET /api/admin/overview`, `/api/admin/apps`, `PUT /api/admin/apps/{id}` | Admin | Übersicht, Prüfung |
+| `GET /api/admin/users`, `PUT/DELETE /api/admin/users/{id}`, `POST …/developer` | Admin | Rollen, Anfragen |
+| `GET /api/admin/purchases`, `POST …/{id}/refund`, `POST /api/admin/announce` | Admin | Käufe, Rundmail |
+| `POST /api/stripe/webhook` | Stripe | Zahlungsbestätigung |
 
-## So veröffentlichst du eine App im Store
+`{id}` ist immer `besitzer/kurzname`, z. B. `anna/super-spiel` oder `Manhunt/manhunt`.
 
-1. In Forgejo im Repo deiner App ein **Release** anlegen (kein Entwurf, kein Pre-Release).
-2. Die gebaute **`.apk` als Anhang** hochladen.
-3. Fertig – der Store zeigt immer das **neueste** Release.
+## Tipps zum Veröffentlichen
 
-Tipps:
+- **Tag/Version = `versionName`** der App (`v1.2.3` ↔ `1.2.3`), sonst erkennt der Store Updates nicht.
+  Beim Upload wird das automatisch geprüft.
+- **`versionCode` erhöhen** – Android installiert Updates nur mit größerem `versionCode`.
+- **Immer mit demselben Schlüssel signieren**, sonst schlägt das Update fehl.
+- Beta-Versionen z. B. `1.3.0-beta1`: Sie gelten als älter als `1.3.0`, Tester bekommen die fertige Version also
+  automatisch, sobald sie erscheint.
+- Mehrere APKs pro Release? Bevorzugt wird `universal`, dann die passende ABI (`arm64-v8a` …), sonst die erste.
 
-- **Tag = Version**: Benenne das Tag wie den `versionName` der App (`v1.2.3` ↔ `1.2.3`), dann erkennt der Store Updates zuverlässig.
-- **`versionCode` erhöhen**: Android installiert ein Update nur, wenn der `versionCode` größer ist.
-- **Immer mit demselben Schlüssel signieren**, sonst schlägt das Update fehl (dann vorher deinstallieren).
-- Mehrere APKs pro Release? Bevorzugt wird eine Datei mit `universal` im Namen, dann die passende ABI (`arm64-v8a` …), sonst die erste.
-- **Icon im Store**: Vor der Installation wird der Repo-Avatar angezeigt (Forgejo → Repo-Einstellungen → Avatar),
-  sonst ein farbiger Anfangsbuchstabe. Nach der Installation das echte App-Icon.
-- **Beschreibung**: Die Repo-Beschreibung erscheint im Store.
+## App bauen
 
-## Store bauen und installieren
-
-Voraussetzungen: JDK 17+ und Android SDK (oder einfach Android Studio).
+Voraussetzungen: JDK 17+ und Android SDK (oder Android Studio).
 
 ```bash
 ./gradlew assembleRelease
 ```
 
-Die APK liegt dann unter `app/build/outputs/apk/release/`. Auf das Handy kopieren und installieren.
-Beim ersten Installieren einer App fragt Android, ob der Store „unbekannte Apps installieren“ darf – erlauben.
+Die APK liegt unter `app/build/outputs/apk/release/`. Version setzen:
+`./gradlew assembleRelease -PappVersionName=2.0.0 -PappVersionCode=5`
 
-### Eigener Signaturschlüssel (empfohlen)
-
-Ohne Konfiguration wird mit dem Debug-Schlüssel signiert. Für stabile Updates einen eigenen anlegen:
-
-```bash
-keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias store
-```
-
-und `keystore.properties` im Projektordner anlegen (wird nicht eingecheckt):
+Eigener Signaturschlüssel (empfohlen): `keytool -genkey -v -keystore release.jks -keyalg RSA -keysize 2048
+-validity 10000 -alias store` und `keystore.properties` anlegen (wird nicht eingecheckt):
 
 ```properties
 storeFile=release.jks
@@ -129,27 +185,26 @@ keyAlias=store
 keyPassword=...
 ```
 
-Version beim Bauen setzen: `./gradlew assembleRelease -PappVersionName=1.1.0 -PappVersionCode=2`
+Der Paketname (`applicationId`) bleibt `com.bytestreamdevelopment.applauncher`, damit bestehende Installationen
+Updates bekommen; der Code liegt im Namespace `com.bytestreamdevelopment.bytedroide`.
 
-### Der Store aktualisiert sich selbst
-
-Lege für den Store selbst ein Repo auf deinem Forgejo an und veröffentliche seine APK als Release –
-dann taucht er in seiner eigenen Liste auf und kann sich selbst aktualisieren.
+**Der Store aktualisiert sich selbst**, wenn er als App im eigenen Katalog liegt (z. B. per Upload oder Forgejo-Release);
+mit `STORE_APP_ID` ist er außerdem unter `https://apps.nebendahl.eu/download` erhältlich.
 
 ## Aufbau
 
 | Datei | Aufgabe |
 |---|---|
-| `server/store_server.py` | Store-Server: Forgejo-Abruf, Benutzer, Freigaben, Codes, Downloads |
+| `server/store_server.py` | Store-Server: Konten, Rollen, Apps, Quellen, Uploads, Betas, Käufe, API |
+| `server/mailer.py` | HTML-E-Mails und SMTP-Versand im Hintergrund |
+| `server/legal.py` | Impressum, Datenschutz, Nutzungsbedingungen, Widerruf |
+| `server/apk_info.py` | liest Paketname/Version aus APKs (binäres AndroidManifest) |
+| `server/web/portal.html` | Entwickler-Portal im Browser |
 | `data/StoreApi.kt` | Client für den Store-Server |
-| `data/Catalog.kt` | Katalog laden, APK auswählen, Installationsstatus bestimmen |
-| `data/Versions.kt` | Versionsvergleich Tag ↔ installierte Version |
-| `data/StoreSettings.kt` | feste Server-Adresse (`SERVER_URL`), Sitzung, Zuordnung Repo → Paketname |
-| `install/ApkInstaller.kt` | Download mit Fortschritt, Installation per `PackageInstaller` |
-| `install/InstallResultReceiver.kt` | Ergebnis der Installation / Bestätigungsdialog |
+| `data/Catalog.kt`, `data/Versions.kt` | Katalog, APK-Auswahl, Versionsvergleich (inkl. Beta) |
+| `install/*` | Download mit Fortschritt, Installation per `PackageInstaller` |
 | `work/UpdateCheckWorker.kt` | Hintergrund-Prüfung + Benachrichtigung |
-| `ui/AccountScreen.kt` | Anmelden / Registrieren / Code einlösen |
-| `ui/AdminScreens.kt`, `ui/AdminViewModel.kt` | Admin-Bereich: Freigaben, Codes, Benutzer |
+| `ui/AccountScreen.kt` | Anmelden, Registrieren, Konto, Käufe, Kauf-Dialog |
+| `ui/DevScreens.kt`, `ui/DevViewModel.kt` | Entwickler-Bereich |
+| `ui/AdminScreens.kt`, `ui/AdminViewModel.kt` | Admin-Bereich |
 | `ui/*` | übrige Oberfläche (Jetpack Compose, Material 3) |
-
-Der Server nutzt von Forgejo: `GET /api/v1/repos/search`, `GET /api/v1/repos/{owner}/{repo}/releases/latest`.

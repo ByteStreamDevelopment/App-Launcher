@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.ui
+package com.bytestreamdevelopment.bytedroide.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -8,12 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -21,7 +16,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -30,10 +25,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.bytestreamdevelopment.applauncher.BuildConfig
-import com.bytestreamdevelopment.applauncher.data.StoreSettings
+import com.bytestreamdevelopment.bytedroide.BuildConfig
+import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
     val s = vm.settings
@@ -41,14 +35,7 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Einstellungen") },
-                navigationIcon = {
-                    IconButton(onClick = { vm.navigate(Screen.Home) }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
-                    }
-                },
-            )
+            BackTopBar("Einstellungen", onBack = { vm.back() })
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -84,6 +71,25 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
             )
             OutlinedButton(onClick = vm::openInstallPermissionSettings, modifier = Modifier.fillMaxWidth()) {
                 Text("Installationsberechtigung öffnen")
+            }
+
+            HorizontalDivider()
+            Text("Rechtliches", style = MaterialTheme.typography.titleMedium)
+            Column {
+                TextButton(onClick = { vm.openLegal("impressum") }) { Text("Impressum") }
+                TextButton(onClick = { vm.openLegal("datenschutz") }) { Text("Datenschutzerklärung") }
+                TextButton(onClick = { vm.openLegal("agb") }) { Text("Nutzungsbedingungen") }
+                TextButton(onClick = { vm.openLegal("widerruf") }) { Text("Widerrufsbelehrung") }
+            }
+
+            HorizontalDivider()
+            Text("Für Entwickler", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Eigene Apps veröffentlichen: Konto → „Entwickler werden“. Hochladen geht auch am PC im Entwickler-Portal.",
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            OutlinedButton(onClick = { vm.openLegal("portal") }, modifier = Modifier.fillMaxWidth()) {
+                Text("Entwickler-Portal öffnen")
             }
 
             HorizontalDivider()

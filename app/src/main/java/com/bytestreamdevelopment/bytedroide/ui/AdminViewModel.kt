@@ -1,34 +1,32 @@
-package com.bytestreamdevelopment.applauncher.ui
+package com.bytestreamdevelopment.bytedroide.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.bytestreamdevelopment.applauncher.data.Access
-import com.bytestreamdevelopment.applauncher.data.AccessCode
-import com.bytestreamdevelopment.applauncher.data.AdminApp
-import com.bytestreamdevelopment.applauncher.data.AdminUser
-import com.bytestreamdevelopment.applauncher.data.StoreApi
-import com.bytestreamdevelopment.applauncher.data.StoreSettings
+import com.bytestreamdevelopment.bytedroide.data.AdminOverview
+import com.bytestreamdevelopment.bytedroide.data.AdminPurchase
+import com.bytestreamdevelopment.bytedroide.data.AdminUser
+import com.bytestreamdevelopment.bytedroide.data.DevApp
+import com.bytestreamdevelopment.bytedroide.data.Role
+import com.bytestreamdevelopment.bytedroide.data.StoreApi
+import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
-enum class AdminTab { Apps, Users }
+enum class AdminTab(val label: String) { Requests("Anfragen"), Apps("Apps"), Users("Benutzer"), Purchases("Käufe") }
 
 data class AdminState(
-    val tab: AdminTab = AdminTab.Apps,
+    val tab: AdminTab = AdminTab.Requests,
     val loading: Boolean = false,
-    val apps: List<AdminApp> = emptyList(),
+    val overview: AdminOverview? = null,
+    val apps: List<DevApp> = emptyList(),
     val users: List<AdminUser> = emptyList(),
-    /** Codes der gerade geöffneten App */
-    val codesFor: String? = null,
-    val codes: List<AccessCode> = emptyList(),
-    /** Zuletzt erzeugte Codes (zum Hervorheben / Teilen) */
-    val freshCodes: List<String> = emptyList(),
-    val error: String? = null,
+    val purchases: List<AdminPurchase> = emptyList(),
 )
 
 class AdminViewModel(application: Application) : AndroidViewModel(application) {
@@ -45,68 +43,71 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
 
     fun selectTab(tab: AdminTab) {
         _state.update { it.copy(tab = tab) }
-        load()
+        if (tab == AdminTab.Purchases) loadPurchases()
     }
 
     fun load(refreshCatalog: Boolean = false) = run(showLoading = true) {
-        val apps = api().adminApps(refreshCatalog)
-        val users = api().users()
-        _state.update { it.copy(apps = apps, users = users) }
+        val api = api()
+        val overview = api.overview()
+        val apps = api.adminApps(refreshCatalog)
+        val users = api.users()
+        _state.update { it.copy(overview = overview, apps = apps, users = users) }
         if (refreshCatalog) onCatalogChanged()
     }
 
-    fun setAccess(app: AdminApp, access: Access) = run {
-        api().setAccess(app.fullName, access)
-        _state.update { s -> s.copy(apps = s.apps.map { if (it.fullName == app.fullName) it.copy(access = access) else it }) }
-        onMessage("${app.name}: ${access.label}")
+    private fun loadPurchases() = run(showLoading = true) {
+        val purchases = api().adminPurchases()
+        _state.update { it.copy(purchases = purchases) }
+    }
+
+    fun review(app: DevApp, approve: Boolean, note: String = "") = run {
+        api().adminUpdateApp(app.fullName, JSONObject().put("review", if (approve) "approved" else "rejected")
+            .put("review_note", note))
+        refreshQuietly()
+        onMessage(if (approve) "${app.name} freigegeben" else "${app.name} abgelehnt")
         onCatalogChanged()
     }
 
-    fun openCodes(fullName: String) {
-        _state.update { it.copy(codesFor = fullName, codes = emptyList(), freshCodes = emptyList()) }
-        loadCodes(fullName)
+    fun decideDeveloper(user: AdminUser, approve: Boolean, note: String = "") = run {
+        api().decideDeveloper(user.user.id, approve, note)
+        refreshQuietly()
+        onMessage(if (approve) "${user.user.username} ist jetzt Entwickler" else "Anfrage von ${user.user.username} abgelehnt")
     }
 
-    private fun loadCodes(fullName: String) = run(showLoading = true) {
-        val codes = api().codes(fullName)
-        _state.update { if (it.codesFor == fullName) it.copy(codes = codes) else it }
-    }
-
-    fun createCodes(fullName: String, count: Int, note: String) = run(showLoading = true) {
-        val created = api().createCodes(fullName, count, note.trim())
-        val codes = api().codes(fullName)
-        _state.update { it.copy(codes = codes, freshCodes = created) }
-        refreshAppsQuietly()
-        onMessage(if (created.size == 1) "Code erstellt: ${created.first()}" else "${created.size} Codes erstellt")
-    }
-
-    fun deleteCode(fullName: String, code: String) = run {
-        api().deleteCode(code)
-        _state.update { s -> s.copy(codes = s.codes.filterNot { it.code == code }, freshCodes = s.freshCodes - code) }
-        refreshAppsQuietly()
-    }
-
-    fun setAdmin(user: AdminUser, admin: Boolean) = run {
-        api().setAdmin(user.user.id, admin)
-        _state.update { it.copy(users = api().users()) }
-        onMessage(if (admin) "${user.user.username} ist jetzt Admin" else "${user.user.username} ist kein Admin mehr")
+    fun setRole(user: AdminUser, role: Role) = run {
+        api().setRole(user.user.id, role)
+        refreshQuietly()
+        onMessage("${user.user.username} ist jetzt ${role.label}")
     }
 
     fun deleteUser(user: AdminUser) = run {
         api().deleteUser(user.user.id)
-        _state.update { s -> s.copy(users = s.users.filterNot { it.user.id == user.user.id }) }
+        refreshQuietly()
         onMessage("${user.user.username} gelöscht")
     }
 
     fun revokeUnlock(user: AdminUser, fullName: String, appName: String) = run {
         api().revokeUnlock(user.user.id, fullName)
-        _state.update { it.copy(users = api().users()) }
-        refreshAppsQuietly()
+        refreshQuietly()
         onMessage("Zugriff auf $appName für ${user.user.username} entzogen")
     }
 
-    private fun refreshAppsQuietly() {
-        runCatching { api().adminApps(false) }.onSuccess { apps -> _state.update { it.copy(apps = apps) } }
+    fun refund(purchase: AdminPurchase) = run(showLoading = true) {
+        api().refund(purchase.id)
+        _state.update { it.copy(purchases = api().adminPurchases()) }
+        onMessage("${purchase.price} an ${purchase.username} erstattet")
+    }
+
+    fun announce(subject: String, message: String) = run(showLoading = true) {
+        val n = api().announce(subject.trim(), message.trim())
+        onMessage("Rundmail an $n Empfänger verschickt")
+    }
+
+    private fun refreshQuietly() {
+        runCatching {
+            val api = api()
+            Triple(api.overview(), api.adminApps(false), api.users())
+        }.onSuccess { (o, a, u) -> _state.update { it.copy(overview = o, apps = a, users = u) } }
     }
 
     private fun run(showLoading: Boolean = false, block: suspend () -> Unit) {
@@ -114,10 +115,10 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             if (showLoading) _state.update { it.copy(loading = true) }
             try {
                 withContext(Dispatchers.IO) { block() }
-                _state.update { it.copy(loading = false, error = null) }
             } catch (e: Exception) {
-                _state.update { it.copy(loading = false, error = e.message) }
                 onMessage(e.message ?: "Fehler")
+            } finally {
+                _state.update { it.copy(loading = false) }
             }
         }
     }

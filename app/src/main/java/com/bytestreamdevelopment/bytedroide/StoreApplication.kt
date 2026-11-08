@@ -1,10 +1,10 @@
-package com.bytestreamdevelopment.applauncher
+package com.bytestreamdevelopment.bytedroide
 
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import com.bytestreamdevelopment.applauncher.data.StoreSettings
-import com.bytestreamdevelopment.applauncher.work.UpdateCheckWorker
+import com.bytestreamdevelopment.bytedroide.data.StoreSettings
+import com.bytestreamdevelopment.bytedroide.work.UpdateCheckWorker
 
 class StoreApplication : Application() {
     override fun onCreate() {

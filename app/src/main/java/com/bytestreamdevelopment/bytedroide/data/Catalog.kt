@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.data
+package com.bytestreamdevelopment.bytedroide.data
 
 import android.content.Context
 import android.content.pm.PackageManager
@@ -19,7 +19,7 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
         val (raw, user) = api().apps()
         // Token vorhanden, aber Server kennt ihn nicht mehr -> Sitzung abgelaufen
         if (user == null && settings.sessionToken.isNotBlank()) settings.sessionToken = ""
-        CatalogResult(raw.mapNotNull(::toStoreApp), user)
+        CatalogResult(raw.mapNotNull { parseApp(it, Build.SUPPORTED_ABIS) }, user)
     }
 
     fun entries(apps: List<StoreApp>): List<AppEntry> = apps.map { entry(it) }
@@ -44,37 +44,56 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
         }
     }
 
-    private fun toStoreApp(o: JSONObject): StoreApp? {
-        val apk = pickApk(o.optJSONArray("apks") ?: JSONArray()) ?: return null
-        val rel = o.optJSONObject("release") ?: JSONObject()
-        return StoreApp(
-            fullName = o.getString("id"),
-            owner = o.optString("owner"),
-            name = o.optString("name"),
-            description = o.optString("description"),
-            htmlUrl = o.optString("html_url"),
-            avatarUrl = if (o.isNull("avatar_url")) null else o.optString("avatar_url").ifBlank { null },
-            release = Release(
-                tag = rel.optString("tag"),
-                name = rel.optString("name").ifBlank { rel.optString("tag") },
-                notes = rel.optString("notes"),
-                publishedAt = rel.optString("published_at"),
-                htmlUrl = rel.optString("html_url"),
-                apk = apk,
-            ),
-            access = Access.of(o.optString("access")),
-            unlocked = o.optBoolean("unlocked", true),
-        )
-    }
+    companion object {
+        /** Wandelt einen App-Eintrag aus /api/apps um (null = keine passende APK). */
+        fun parseApp(o: JSONObject, abis: Array<String>): StoreApp? {
+            val apk = pickApk(o.optJSONArray("apks") ?: JSONArray(), abis) ?: return null
+            val rel = o.optJSONObject("release") ?: JSONObject()
+            val beta = o.optJSONObject("beta") ?: JSONObject()
+            return StoreApp(
+                fullName = o.getString("id"),
+                owner = o.optString("owner"),
+                developer = if (o.isNull("developer")) null else o.optString("developer").ifBlank { null },
+                name = o.optString("name"),
+                description = o.optString("description"),
+                category = o.optString("category"),
+                homepage = o.optString("homepage"),
+                htmlUrl = o.optString("html_url"),
+                avatarUrl = if (o.isNull("avatar_url")) null else o.optString("avatar_url").ifBlank { null },
+                release = Release(
+                    tag = rel.optString("tag"),
+                    name = rel.optString("name").ifBlank { rel.optString("tag") },
+                    notes = rel.optString("notes"),
+                    publishedAt = rel.optString("published_at"),
+                    htmlUrl = rel.optString("html_url"),
+                    channel = rel.optString("channel", "stable"),
+                    apk = apk,
+                ),
+                access = Access.of(o.optString("access")),
+                priceCents = o.optInt("price_cents"),
+                price = o.optString("price"),
+                canBuy = o.optBoolean("can_buy"),
+                unlocked = o.optBoolean("unlocked", true),
+                beta = BetaInfo(
+                    mode = BetaMode.of(beta.optString("mode")),
+                    available = beta.optBoolean("available"),
+                    joined = beta.optBoolean("joined"),
+                    version = beta.optString("version"),
+                ),
+                review = o.optString("review", "approved"),
+                canManage = o.optBoolean("can_manage"),
+            )
+        }
 
-    /** Bevorzugt "universal"-APKs, dann passende ABI, sonst die erste APK. */
-    private fun pickApk(assets: JSONArray): ApkAsset? {
-        val apks = (0 until assets.length())
-            .map { assets.getJSONObject(it) }
-            .map { ApkAsset(it.optString("name"), it.optLong("size")) }
-        if (apks.isEmpty()) return null
-        return apks.firstOrNull { "universal" in it.name.lowercase() }
-            ?: Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi -> apks.firstOrNull { abi in it.name } }
-            ?: apks.first()
+        /** Bevorzugt "universal"-APKs, dann passende ABI, sonst die erste APK. */
+        private fun pickApk(assets: JSONArray, abis: Array<String>): ApkAsset? {
+            val apks = (0 until assets.length())
+                .map { assets.getJSONObject(it) }
+                .map { ApkAsset(it.optString("name"), it.optLong("size")) }
+            if (apks.isEmpty()) return null
+            return apks.firstOrNull { "universal" in it.name.lowercase() }
+                ?: abis.firstNotNullOfOrNull { abi -> apks.firstOrNull { abi in it.name } }
+                ?: apks.first()
+        }
     }
 }

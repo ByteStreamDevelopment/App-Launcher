@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.work
+package com.bytestreamdevelopment.bytedroide.work
 
 import android.Manifest
 import android.app.PendingIntent
@@ -16,11 +16,11 @@ import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.bytestreamdevelopment.applauncher.MainActivity
-import com.bytestreamdevelopment.applauncher.R
-import com.bytestreamdevelopment.applauncher.data.Catalog
-import com.bytestreamdevelopment.applauncher.data.InstallState
-import com.bytestreamdevelopment.applauncher.data.StoreSettings
+import com.bytestreamdevelopment.bytedroide.MainActivity
+import com.bytestreamdevelopment.bytedroide.R
+import com.bytestreamdevelopment.bytedroide.data.Catalog
+import com.bytestreamdevelopment.bytedroide.data.InstallState
+import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 import java.util.concurrent.TimeUnit
 
 /** Prüft regelmäßig auf neue Releases installierter Apps und benachrichtigt. */

@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.ui
+package com.bytestreamdevelopment.bytedroide.ui
 
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme

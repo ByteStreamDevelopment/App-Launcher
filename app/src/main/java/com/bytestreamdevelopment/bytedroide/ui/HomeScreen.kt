@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.ui
+package com.bytestreamdevelopment.bytedroide.ui
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -13,9 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
@@ -43,7 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.bytestreamdevelopment.applauncher.data.AppEntry
+import com.bytestreamdevelopment.bytedroide.data.AppEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +59,9 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
                 actions = {
                     if (state.user?.isAdmin == true) {
                         IconButton(onClick = { vm.navigate(Screen.Admin) }) { Icon(Icons.Default.Build, "Admin-Bereich") }
+                    }
+                    if (state.user?.isDeveloper == true) {
+                        IconButton(onClick = { vm.navigate(Screen.Dev) }) { Icon(Icons.Default.Create, "Entwickler-Bereich") }
                     }
                     IconButton(onClick = { vm.navigate(Screen.Account) }) {
                         Icon(if (state.user != null) Icons.Default.AccountCircle else Icons.Default.Person, "Konto")
@@ -105,10 +112,12 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
 private fun AppList(state: UiState, vm: StoreViewModel) {
     val list: List<AppEntry> = when (state.tab) {
         Tab.Discover -> state.entries.filter {
-            state.query.isBlank() ||
-                it.app.name.contains(state.query, ignoreCase = true) ||
-                it.app.description.contains(state.query, ignoreCase = true) ||
-                it.app.owner.contains(state.query, ignoreCase = true)
+            (state.category == null || it.app.category == state.category) && (
+                state.query.isBlank() ||
+                    it.app.name.contains(state.query, ignoreCase = true) ||
+                    it.app.description.contains(state.query, ignoreCase = true) ||
+                    it.app.owner.contains(state.query, ignoreCase = true)
+                )
         }
         Tab.Updates -> state.updates
         Tab.Installed -> state.installed
@@ -127,6 +136,19 @@ private fun AppList(state: UiState, vm: StoreViewModel) {
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
                 )
+            }
+            if (state.categories.isNotEmpty()) {
+                item {
+                    Row(
+                        Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(state.category == null, onClick = { vm.setCategory(null) }, label = { Text("Alle") })
+                        state.categories.forEach { c ->
+                            FilterChip(state.category == c, onClick = { vm.setCategory(c) }, label = { Text(c) })
+                        }
+                    }
+                }
             }
         }
         if (state.tab == Tab.Updates && list.size > 1) {
@@ -181,10 +203,10 @@ private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel) {
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                AccessBadge(entry.app.access)
+                AppBadges(entry.app)
             }
             Text(
-                entry.app.description.ifBlank { entry.app.owner },
+                entry.app.description.lineSequence().firstOrNull()?.ifBlank { null } ?: entry.app.owner,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,

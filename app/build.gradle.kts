@@ -14,15 +14,16 @@ val keystoreProps = Properties().apply {
 }
 
 android {
-    namespace = "com.bytestreamdevelopment.applauncher"
+    namespace = "com.bytestreamdevelopment.bytedroide"
     compileSdk = 35
 
     defaultConfig {
+        // Bleibt unverändert, damit bestehende Installationen Updates bekommen
         applicationId = "com.bytestreamdevelopment.applauncher"
         minSdk = 26
         targetSdk = 35
-        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 4
-        versionName = (project.findProperty("appVersionName") as String?) ?: "1.3.0"
+        versionCode = (project.findProperty("appVersionCode") as String?)?.toInt() ?: 5
+        versionName = (project.findProperty("appVersionName") as String?) ?: "2.0.0"
     }
 
     signingConfigs {
@@ -79,4 +80,6 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     testImplementation("junit:junit:4.13.2")
+    // echte org.json-Implementierung für Unit-Tests (im android.jar nur Platzhalter)
+    testImplementation("org.json:json:20240303")
 }

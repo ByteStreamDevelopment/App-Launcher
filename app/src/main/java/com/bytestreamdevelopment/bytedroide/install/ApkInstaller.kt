@@ -1,4 +1,4 @@
-package com.bytestreamdevelopment.applauncher.install
+package com.bytestreamdevelopment.bytedroide.install
 
 import android.app.PendingIntent
 import android.content.Context
@@ -6,9 +6,9 @@ import android.content.Intent
 import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.os.Build
-import com.bytestreamdevelopment.applauncher.data.ApiException
-import com.bytestreamdevelopment.applauncher.data.StoreApi
-import com.bytestreamdevelopment.applauncher.data.StoreApp
+import com.bytestreamdevelopment.bytedroide.data.ApiException
+import com.bytestreamdevelopment.bytedroide.data.StoreApi
+import com.bytestreamdevelopment.bytedroide.data.StoreApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext

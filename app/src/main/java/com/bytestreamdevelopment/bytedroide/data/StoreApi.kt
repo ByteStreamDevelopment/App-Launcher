@@ -1,8 +1,9 @@
-package com.bytestreamdevelopment.applauncher.data
+package com.bytestreamdevelopment.bytedroide.data
 
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
@@ -24,9 +25,20 @@ class StoreApi(baseUrl: String, private val token: String?) {
     fun login(username: String, password: String): Pair<String, UserInfo> =
         session(request("POST", "/api/login", JSONObject().put("username", username).put("password", password)))
 
-    fun register(username: String, password: String, adminPassword: String): Pair<String, UserInfo> {
-        val body = JSONObject().put("username", username).put("password", password)
-        if (adminPassword.isNotBlank()) body.put("admin_password", adminPassword)
+    fun register(
+        username: String,
+        email: String,
+        password: String,
+        developer: Boolean,
+        developerNote: String,
+    ): Pair<String, UserInfo> {
+        val body = JSONObject()
+            .put("username", username)
+            .put("email", email)
+            .put("password", password)
+            .put("accept_terms", true)
+            .put("developer", developer)
+            .put("developer_note", developerNote)
         return session(request("POST", "/api/register", body))
     }
 
@@ -34,36 +46,144 @@ class StoreApi(baseUrl: String, private val token: String?) {
         request("POST", "/api/logout", JSONObject())
     }
 
+    fun forgotPassword(login: String) {
+        request("POST", "/api/password/forgot", JSONObject().put("login", login))
+    }
+
+    fun me(): UserInfo = parseUser(request("GET", "/api/me").getJSONObject("user"))
+
+    fun updateMe(changes: JSONObject): UserInfo = parseUser(request("PUT", "/api/me", changes).getJSONObject("user"))
+
+    fun changePassword(old: String, new: String) {
+        request("POST", "/api/me/password", JSONObject().put("old_password", old).put("new_password", new))
+    }
+
+    fun resendVerification() {
+        request("POST", "/api/me/verify", JSONObject())
+    }
+
+    fun requestDeveloper(note: String): UserInfo =
+        parseUser(request("POST", "/api/me/developer", JSONObject().put("note", note)).getJSONObject("user"))
+
+    fun deleteAccount(password: String) {
+        request("DELETE", "/api/me", JSONObject().put("password", password))
+    }
+
+    fun exportData(): String = request("GET", "/api/me/export").toString(2)
+
+    fun purchases(): List<Purchase> = request("GET", "/api/me/purchases").getJSONArray("purchases").objects().map {
+        Purchase(
+            id = it.getLong("id"),
+            app = it.optString("app"),
+            appName = it.optString("app_name"),
+            price = it.optString("price"),
+            status = it.optString("status"),
+            createdAt = it.optLong("created_at"),
+            withdrawnAt = if (it.isNull("withdrawn_at")) null else it.optLong("withdrawn_at"),
+            canWithdraw = it.optBoolean("can_withdraw"),
+        )
+    }
+
+    fun withdraw(purchaseId: Long) {
+        request("POST", "/api/me/purchases/$purchaseId/withdraw", JSONObject())
+    }
+
     /** Löst einen Einmal-Code ein, liefert den Namen der freigeschalteten App. */
     fun redeem(code: String): String =
         request("POST", "/api/redeem", JSONObject().put("code", code)).optString("name")
 
+    fun setBeta(fullName: String, join: Boolean) {
+        request(if (join) "POST" else "DELETE", "/api/apps/${appPath(fullName)}/beta", if (join) JSONObject() else null)
+    }
+
+    /** Startet den Kauf, liefert die Adresse der Bezahlseite. */
+    fun purchase(fullName: String): String =
+        request("POST", "/api/apps/${appPath(fullName)}/purchase", JSONObject().put("accept_waiver", true))
+            .getString("checkout_url")
+
     fun openDownload(fullName: String, asset: String): HttpURLConnection =
         open("GET", "${base}/api/apps/${appPath(fullName)}/download?asset=${enc(asset)}")
 
-    // --- Admin -------------------------------------------------------------
+    // --- Entwickler --------------------------------------------------------
 
-    fun adminApps(refresh: Boolean): List<AdminApp> =
-        request("GET", "/api/admin/apps" + if (refresh) "?refresh=1" else "").getJSONArray("apps").objects().map {
-            AdminApp(
-                fullName = it.getString("id"),
-                name = it.optString("name"),
-                owner = it.optString("owner"),
-                access = Access.of(it.optString("access")),
-                isPrivate = it.optBoolean("private"),
-                codesOpen = it.optInt("codes_open"),
-                codesUsed = it.optInt("codes_used"),
-                unlockedUsers = it.optInt("unlocked_users"),
-                version = it.optJSONObject("release")?.optString("tag").orEmpty(),
+    fun devApps(): List<DevApp> = request("GET", "/api/dev/apps").getJSONArray("apps").objects().map(::parseDevApp)
+
+    fun devApp(fullName: String): DevApp = parseDevApp(request("GET", "/api/dev/apps/${appPath(fullName)}"))
+
+    fun createApp(fields: JSONObject): DevApp = parseDevApp(request("POST", "/api/dev/apps", fields))
+
+    fun updateApp(fullName: String, fields: JSONObject): DevApp =
+        parseDevApp(request("PUT", "/api/dev/apps/${appPath(fullName)}", fields))
+
+    fun deleteApp(fullName: String) {
+        request("DELETE", "/api/dev/apps/${appPath(fullName)}")
+    }
+
+    fun releases(fullName: String): List<DevRelease> =
+        request("GET", "/api/dev/apps/${appPath(fullName)}/releases").getJSONArray("releases").objects().map {
+            DevRelease(
+                id = it.getLong("id"),
+                version = it.optString("version"),
+                versionCode = if (it.isNull("version_code")) null else it.optLong("version_code"),
+                notes = it.optString("notes"),
+                channel = it.optString("channel"),
+                size = it.optLong("size"),
+                createdAt = it.optLong("created_at"),
             )
         }
 
-    fun setAccess(fullName: String, access: Access) {
-        request("PUT", "/api/admin/apps/${appPath(fullName)}", JSONObject().put("access", access.apiValue))
+    fun deleteRelease(fullName: String, id: Long) {
+        request("DELETE", "/api/dev/apps/${appPath(fullName)}/releases/$id")
+    }
+
+    /** Lädt eine APK hoch. Liefert die erkannte Version. */
+    fun uploadRelease(
+        fullName: String,
+        input: InputStream,
+        size: Long,
+        channel: String,
+        notes: String,
+        onProgress: (Float) -> Unit,
+    ): String {
+        val url = "$base/api/dev/apps/${appPath(fullName)}/releases?channel=${enc(channel)}&notes=${enc(notes)}"
+        val conn = open("POST", url)
+        conn.readTimeout = 300_000
+        conn.doOutput = true
+        conn.setFixedLengthStreamingMode(size)
+        conn.setRequestProperty("Content-Type", "application/vnd.android.package-archive")
+        try {
+            conn.outputStream.use { out ->
+                val buffer = ByteArray(64 * 1024)
+                var done = 0L
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    out.write(buffer, 0, read)
+                    done += read
+                    onProgress((done.toFloat() / size).coerceIn(0f, 1f))
+                }
+            }
+            return readResponse(conn).optString("version")
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    fun uploadIcon(fullName: String, data: ByteArray) {
+        val conn = open("POST", "$base/api/dev/apps/${appPath(fullName)}/icon")
+        conn.doOutput = true
+        conn.setFixedLengthStreamingMode(data.size)
+        conn.setRequestProperty("Content-Type", "application/octet-stream")
+        try {
+            conn.outputStream.use { it.write(data) }
+            readResponse(conn)
+        } finally {
+            conn.disconnect()
+        }
     }
 
     fun codes(fullName: String): List<AccessCode> =
-        request("GET", "/api/admin/apps/${appPath(fullName)}/codes").getJSONArray("codes").objects().map {
+        request("GET", "/api/dev/apps/${appPath(fullName)}/codes").getJSONArray("codes").objects().map {
             AccessCode(
                 code = it.getString("code"),
                 note = it.optString("note"),
@@ -75,24 +195,71 @@ class StoreApi(baseUrl: String, private val token: String?) {
 
     fun createCodes(fullName: String, count: Int, note: String): List<String> {
         val body = JSONObject().put("count", count).put("note", note)
-        val arr = request("POST", "/api/admin/apps/${appPath(fullName)}/codes", body).getJSONArray("codes")
+        val arr = request("POST", "/api/dev/apps/${appPath(fullName)}/codes", body).getJSONArray("codes")
         return (0 until arr.length()).map { arr.getString(it) }
     }
 
     fun deleteCode(code: String) {
-        request("DELETE", "/api/admin/codes/${enc(code)}")
+        request("DELETE", "/api/dev/codes/${enc(code)}")
     }
+
+    fun testers(fullName: String): List<Tester> =
+        request("GET", "/api/dev/apps/${appPath(fullName)}/testers").getJSONArray("testers").objects().map {
+            Tester(it.getLong("id"), it.optString("username"), it.optLong("joined_at"))
+        }
+
+    fun addTester(fullName: String, username: String) {
+        request("POST", "/api/dev/apps/${appPath(fullName)}/testers", JSONObject().put("username", username))
+    }
+
+    fun removeTester(fullName: String, userId: Long) {
+        request("DELETE", "/api/dev/apps/${appPath(fullName)}/testers/$userId")
+    }
+
+    // --- Admin -------------------------------------------------------------
+
+    fun overview(): AdminOverview = request("GET", "/api/admin/overview").let {
+        AdminOverview(
+            users = it.optInt("users"),
+            developers = it.optInt("developers"),
+            devRequests = it.optInt("dev_requests"),
+            apps = it.optInt("apps"),
+            appsPending = it.optInt("apps_pending"),
+            downloads30d = it.optInt("downloads_30d"),
+            revenueCents = it.optLong("revenue_cents"),
+            withdrawalsOpen = it.optInt("withdrawals_open"),
+            mailEnabled = it.optBoolean("mail_enabled"),
+            paymentsEnabled = it.optBoolean("payments_enabled"),
+            legalMissing = (it.optJSONArray("legal_missing") ?: JSONArray()).let { a ->
+                (0 until a.length()).map(a::getString)
+            },
+        )
+    }
+
+    fun adminApps(refresh: Boolean): List<DevApp> =
+        request("GET", "/api/admin/apps" + if (refresh) "?refresh=1" else "").getJSONArray("apps").objects()
+            .map(::parseDevApp)
+
+    fun adminUpdateApp(fullName: String, fields: JSONObject): DevApp =
+        parseDevApp(request("PUT", "/api/admin/apps/${appPath(fullName)}", fields))
 
     fun users(): List<AdminUser> = request("GET", "/api/admin/users").getJSONArray("users").objects().map { u ->
         AdminUser(
             user = parseUser(u),
             createdAt = u.optLong("created_at"),
-            unlocked = (u.optJSONArray("unlocked") ?: JSONArray()).objects().map { it.getString("id") to it.optString("name") },
+            devNote = u.optString("dev_note"),
+            apps = u.optInt("apps"),
+            unlocked = (u.optJSONArray("unlocked") ?: JSONArray()).objects()
+                .map { it.getString("id") to it.optString("name") },
         )
     }
 
-    fun setAdmin(userId: Long, admin: Boolean) {
-        request("PUT", "/api/admin/users/$userId", JSONObject().put("is_admin", admin))
+    fun setRole(userId: Long, role: Role) {
+        request("PUT", "/api/admin/users/$userId", JSONObject().put("role", role.apiValue))
+    }
+
+    fun decideDeveloper(userId: Long, approve: Boolean, note: String) {
+        request("POST", "/api/admin/users/$userId/developer", JSONObject().put("approve", approve).put("note", note))
     }
 
     fun deleteUser(userId: Long) {
@@ -102,6 +269,28 @@ class StoreApi(baseUrl: String, private val token: String?) {
     fun revokeUnlock(userId: Long, fullName: String) {
         request("DELETE", "/api/admin/users/$userId/unlocks/${appPath(fullName)}")
     }
+
+    fun adminPurchases(): List<AdminPurchase> =
+        request("GET", "/api/admin/purchases").getJSONArray("purchases").objects().map {
+            AdminPurchase(
+                id = it.getLong("id"),
+                username = it.optString("username"),
+                email = it.optString("email"),
+                appName = it.optString("app_name"),
+                price = it.optString("price"),
+                status = it.optString("status"),
+                createdAt = it.optLong("created_at"),
+            )
+        }
+
+    fun refund(purchaseId: Long) {
+        request("POST", "/api/admin/purchases/$purchaseId/refund", JSONObject())
+    }
+
+    /** Rundmail an alle, die Neuigkeiten abonniert haben. Liefert die Anzahl der Empfänger. */
+    fun announce(subject: String, message: String): Int =
+        request("POST", "/api/admin/announce", JSONObject().put("subject", subject).put("message", message))
+            .optInt("recipients")
 
     // --- Intern ------------------------------------------------------------
 
@@ -115,17 +304,21 @@ class StoreApi(baseUrl: String, private val token: String?) {
                 conn.setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 conn.outputStream.use { it.write(body.toString().toByteArray()) }
             }
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
-            if (code !in 200..299) {
-                val msg = runCatching { JSONObject(text).optString("error") }.getOrNull()
-                throw ApiException(code, msg?.ifBlank { null } ?: "Serverfehler ($code)")
-            }
-            return if (text.isBlank()) JSONObject() else JSONObject(text)
+            return readResponse(conn)
         } finally {
             conn.disconnect()
         }
+    }
+
+    private fun readResponse(conn: HttpURLConnection): JSONObject {
+        val code = conn.responseCode
+        val stream = if (code in 200..299) conn.inputStream else conn.errorStream
+        val text = stream?.bufferedReader()?.use { it.readText() }.orEmpty()
+        if (code !in 200..299) {
+            val msg = runCatching { JSONObject(text).optString("error") }.getOrNull()
+            throw ApiException(code, msg?.ifBlank { null } ?: "Serverfehler ($code)")
+        }
+        return if (text.isBlank()) JSONObject() else JSONObject(text)
     }
 
     private fun open(method: String, url: String): HttpURLConnection {
@@ -148,8 +341,45 @@ class StoreApi(baseUrl: String, private val token: String?) {
         fun parseUser(o: JSONObject) = UserInfo(
             id = o.optLong("id"),
             username = o.optString("username"),
-            isAdmin = o.optBoolean("is_admin"),
-            isOwner = o.optBoolean("is_owner"),
+            email = o.optString("email"),
+            emailVerified = o.optBoolean("email_verified"),
+            role = Role.of(o.optString("role", if (o.optBoolean("is_admin")) "admin" else "user")),
+            devRequested = o.optBoolean("dev_requested"),
+            notifyUpdates = o.optBoolean("notify_updates", true),
+            notifyNews = o.optBoolean("notify_news"),
+        )
+
+        private fun JSONObject.optStringOrNull(key: String) =
+            if (isNull(key)) null else optString(key).ifBlank { null }
+
+        fun parseDevApp(o: JSONObject) = DevApp(
+            fullName = o.getString("id"),
+            name = o.optString("name"),
+            description = o.optString("description"),
+            category = o.optString("category"),
+            homepage = o.optString("homepage"),
+            developer = o.optStringOrNull("developer"),
+            sourceType = o.optString("source_type"),
+            sourceUrl = o.optString("source_url"),
+            hasSourceToken = o.optBoolean("has_source_token"),
+            packageName = o.optStringOrNull("package_name"),
+            access = Access.of(o.optString("access")),
+            priceCents = o.optInt("price_cents"),
+            beta = BetaMode.of(o.optString("beta")),
+            review = o.optString("review"),
+            reviewNote = o.optString("review_note"),
+            avatarUrl = o.optStringOrNull("avatar_url"),
+            stable = o.optStringOrNull("stable"),
+            betaVersion = o.optStringOrNull("beta_version"),
+            sourceError = o.optStringOrNull("source_error"),
+            downloads = o.optInt("downloads"),
+            downloads30d = o.optInt("downloads_30d"),
+            sales = o.optInt("sales"),
+            revenueCents = o.optLong("revenue_cents"),
+            codesOpen = o.optInt("codes_open"),
+            codesUsed = o.optInt("codes_used"),
+            testers = o.optInt("testers"),
+            unlockedUsers = o.optInt("unlocked_users"),
         )
     }
 }
