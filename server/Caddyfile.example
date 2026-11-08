@@ -26,8 +26,6 @@ apps.nebendahl.eu {
 			read_timeout 10m
 			write_timeout 10m
 		}
-		health_uri /healthz
-		health_interval 30s
 	}
 
 	log {
