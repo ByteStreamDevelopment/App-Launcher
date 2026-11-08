@@ -1,3 +1,7 @@
+# Fester Projektname: sonst nimmt Docker Compose den Ordnernamen ("server") und hält Container aus anderen
+# Projekten mit gleichem Ordnernamen für "verwaist" (--remove-orphans würde sie löschen).
+name: bytedroide
+
 services:
   bytedroide:
     build: .
