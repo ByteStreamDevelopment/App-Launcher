@@ -194,6 +194,22 @@ keyPassword=...
 Der Paketname (`applicationId`) bleibt `com.bytestreamdevelopment.applauncher`, damit bestehende Installationen
 Updates bekommen; der Code liegt im Namespace `com.bytestreamdevelopment.bytedroide`.
 
+### Automatisch bei jedem GitHub-Release bauen
+
+`.github/workflows/release.yml` baut bei jedem **veröffentlichten Release** (Tag wie `v2.1.0`) eine signierte APK,
+hängt sie an das Release und lädt sie in den Store hoch (Pre-Releases wie `v2.2.0-beta1` → Beta-Kanal).
+`versionName` kommt aus dem Tag, `versionCode` wird daraus berechnet (`2.1.3` → `2010300`, Vorabversionen etwas
+kleiner), steigt also automatisch.
+
+Einmalig einrichten:
+1. Signaturschlüssel erzeugen (siehe oben) und als Secrets anlegen (Repo → Settings → Secrets and variables → Actions):
+   `KEYSTORE_BASE64` (Ausgabe von `base64 -w0 release.jks`), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`.
+2. Im Entwickler-Portal eine App mit Kurzname z. B. `bytedroide` und Quelle „APK hochladen“ anlegen und einen
+   API-Schlüssel erstellen → Secret `BYTEDROIDE_API_KEY`, Variable `BYTEDROIDE_APP` = `DEINNAME/bytedroide`.
+3. In `server/.env` `STORE_APP_ID=DEINNAME/bytedroide` setzen → die APK gibt es dann auch unter `/download`.
+
+Danach genügt: GitHub → Releases → „Draft a new release“ → Tag `v2.1.0` → Publish.
+
 **Der Store aktualisiert sich selbst**, wenn er als App im eigenen Katalog liegt (z. B. per Upload oder Forgejo-Release);
 mit `STORE_APP_ID` ist er außerdem unter `https://apps.nebendahl.eu/download` erhältlich.
 
