@@ -2412,9 +2412,38 @@ def make_server(config: Config, sources: Sources = None, mailer=None, stripe=Non
     return server
 
 
+def drop_privileges(config: Config):
+    """Im Docker-Container als root gestartet: Datenordner dem Dienstbenutzer geben, dann Rechte abgeben.
+
+    So funktioniert ein frisch angelegter ./data-Ordner (gehört root) ohne manuelles chown.
+    """
+    uid = int(os.environ.get("RUN_AS_UID", "0") or 0)
+    if not uid or os.geteuid() != 0:
+        return
+    gid = int(os.environ.get("RUN_AS_GID", str(uid)) or uid)
+    dirs = {os.path.dirname(os.path.abspath(config.db_path)), config.data_dir}
+    for d in dirs:
+        os.makedirs(d, exist_ok=True)
+        for root, subdirs, files in os.walk(d):
+            for name in [root] + [os.path.join(root, f) for f in subdirs + files]:
+                st = os.lstat(name)
+                if (st.st_uid, st.st_gid) != (uid, gid):
+                    os.lchown(name, uid, gid)
+    os.setgroups([])
+    os.setgid(gid)
+    os.setuid(uid)
+    log.info("Datenordner %s gehören jetzt UID %s, Server läuft ohne Root-Rechte", ", ".join(sorted(dirs)), uid)
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = Config()
+    drop_privileges(config)
+    db_dir = os.path.dirname(os.path.abspath(config.db_path))
+    if not os.access(db_dir, os.W_OK):
+        log.error("Kein Schreibrecht auf %s (läuft als UID %s). Lösung auf dem Host: chown -R %s:%s data",
+                  db_dir, os.getuid(), os.getuid(), os.getgid())
+        raise SystemExit(1)
     if config.forgejo_auto_import and not config.forgejo_token:
         log.warning("FORGEJO_TOKEN ist nicht gesetzt – nur öffentliche Forgejo-Repos sind sichtbar.")
     if not config.smtp_host:
