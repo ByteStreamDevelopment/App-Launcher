@@ -4,42 +4,22 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** Lädt den App-Katalog vom Forgejo-Server und ermittelt den Installationsstatus. */
+data class CatalogResult(val apps: List<StoreApp>, val user: UserInfo?)
+
+/** Lädt den App-Katalog vom Store-Server und ermittelt den Installationsstatus. */
 class Catalog(private val context: Context, private val settings: StoreSettings) {
 
-    fun api() = ForgejoApi(settings.serverUrl, settings.token.ifBlank { null })
+    fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null })
 
-    suspend fun load(): List<StoreApp> = withContext(Dispatchers.IO) {
-        val api = api()
-        val owners = settings.owners
-        val repos = api.searchRepos().filter { repo ->
-            val owner = repo.optJSONObject("owner")?.optString("login").orEmpty().lowercase()
-            repo.optInt("release_counter", 1) > 0 &&
-                !repo.optBoolean("empty") &&
-                (owners.isEmpty() || owner in owners)
-        }
-        val limit = Semaphore(6)
-        coroutineScope {
-            repos.map { repo ->
-                async {
-                    limit.withPermit {
-                        runCatching {
-                            val fullName = repo.getString("full_name")
-                            api.latestRelease(fullName)?.let { toStoreApp(repo, it) }
-                        }.getOrNull()
-                    }
-                }
-            }.awaitAll()
-        }.filterNotNull().sortedBy { it.name.lowercase() }
+    suspend fun load(): CatalogResult = withContext(Dispatchers.IO) {
+        val (raw, user) = api().apps()
+        // Token vorhanden, aber Server kennt ihn nicht mehr -> Sitzung abgelaufen
+        if (user == null && settings.sessionToken.isNotBlank()) settings.sessionToken = ""
+        CatalogResult(raw.mapNotNull(::toStoreApp), user)
     }
 
     fun entries(apps: List<StoreApp>): List<AppEntry> = apps.map { entry(it) }
@@ -64,24 +44,26 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
         }
     }
 
-    private fun toStoreApp(repo: JSONObject, release: JSONObject): StoreApp? {
-        val apk = pickApk(release.optJSONArray("assets") ?: JSONArray()) ?: return null
-        val owner = repo.optJSONObject("owner")?.optString("login").orEmpty()
+    private fun toStoreApp(o: JSONObject): StoreApp? {
+        val apk = pickApk(o.optJSONArray("apks") ?: JSONArray()) ?: return null
+        val rel = o.optJSONObject("release") ?: JSONObject()
         return StoreApp(
-            fullName = repo.getString("full_name"),
-            owner = owner,
-            name = repo.optString("name"),
-            description = repo.optString("description"),
-            htmlUrl = repo.optString("html_url"),
-            avatarUrl = repo.optString("avatar_url").takeIf { it.isNotBlank() },
+            fullName = o.getString("id"),
+            owner = o.optString("owner"),
+            name = o.optString("name"),
+            description = o.optString("description"),
+            htmlUrl = o.optString("html_url"),
+            avatarUrl = if (o.isNull("avatar_url")) null else o.optString("avatar_url").ifBlank { null },
             release = Release(
-                tag = release.optString("tag_name"),
-                name = release.optString("name").ifBlank { release.optString("tag_name") },
-                notes = release.optString("body"),
-                publishedAt = release.optString("published_at"),
-                htmlUrl = release.optString("html_url"),
+                tag = rel.optString("tag"),
+                name = rel.optString("name").ifBlank { rel.optString("tag") },
+                notes = rel.optString("notes"),
+                publishedAt = rel.optString("published_at"),
+                htmlUrl = rel.optString("html_url"),
                 apk = apk,
             ),
+            access = Access.of(o.optString("access")),
+            unlocked = o.optBoolean("unlocked", true),
         )
     }
 
@@ -89,8 +71,7 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
     private fun pickApk(assets: JSONArray): ApkAsset? {
         val apks = (0 until assets.length())
             .map { assets.getJSONObject(it) }
-            .filter { it.optString("name").endsWith(".apk", ignoreCase = true) }
-            .map { ApkAsset(it.optString("name"), it.optLong("size"), it.optString("browser_download_url")) }
+            .map { ApkAsset(it.optString("name"), it.optLong("size")) }
         if (apks.isEmpty()) return null
         return apks.firstOrNull { "universal" in it.name.lowercase() }
             ?: Build.SUPPORTED_ABIS.firstNotNullOfOrNull { abi -> apks.firstOrNull { abi in it.name } }

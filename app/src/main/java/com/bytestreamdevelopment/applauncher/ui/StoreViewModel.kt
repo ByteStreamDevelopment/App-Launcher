@@ -11,16 +11,19 @@ import com.bytestreamdevelopment.applauncher.data.Catalog
 import com.bytestreamdevelopment.applauncher.data.InstallState
 import com.bytestreamdevelopment.applauncher.data.StoreApp
 import com.bytestreamdevelopment.applauncher.data.StoreSettings
+import com.bytestreamdevelopment.applauncher.data.UserInfo
 import com.bytestreamdevelopment.applauncher.install.ApkInstaller
 import com.bytestreamdevelopment.applauncher.install.InstallEvent
 import com.bytestreamdevelopment.applauncher.install.InstallEvents
 import com.bytestreamdevelopment.applauncher.work.UpdateCheckWorker
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 sealed interface Task {
     /** progress = 0..1, null = unbekannt */
@@ -32,6 +35,9 @@ sealed interface Screen {
     data object Home : Screen
     data class Detail(val fullName: String) : Screen
     data object Settings : Screen
+    data object Account : Screen
+    data object Admin : Screen
+    data class AdminApp(val fullName: String) : Screen
 }
 
 enum class Tab { Discover, Updates, Installed }
@@ -47,6 +53,12 @@ data class UiState(
     val query: String = "",
     val message: String? = null,
     val needsInstallPermission: Boolean = false,
+    val user: UserInfo? = null,
+    val serverConfigured: Boolean = true,
+    /** Code-Dialog offen (optional mit vorgewählter App) */
+    val redeemFor: String? = null,
+    val showRedeem: Boolean = false,
+    val busy: Boolean = false,
 ) {
     val updates get() = entries.filter { it.state is InstallState.UpdateAvailable }
     val installed get() = entries.filter { it.state !is InstallState.NotInstalled }
@@ -58,7 +70,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     val settings = StoreSettings(application)
     private val catalog = Catalog(application, settings)
 
-    private val _state = MutableStateFlow(UiState())
+    private val _state = MutableStateFlow(UiState(serverConfigured = settings.isServerConfigured))
     val state: StateFlow<UiState> = _state
 
     private var apps: List<StoreApp> = emptyList()
@@ -67,16 +79,26 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch { InstallEvents.events.collect(::onInstallEvent) }
+        if (!settings.isServerConfigured) navigate(Screen.Settings)
         refresh()
     }
 
+    fun api() = catalog.api()
+
     fun refresh() {
         loadJob?.cancel()
+        if (!settings.isServerConfigured) {
+            _state.update { it.copy(serverConfigured = false, loadedOnce = true, error = "Keine Server-Adresse eingestellt") }
+            return
+        }
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
+            _state.update { it.copy(loading = true, error = null, serverConfigured = true) }
             try {
-                apps = catalog.load()
-                _state.update { it.copy(entries = catalog.entries(apps), loading = false, loadedOnce = true) }
+                val result = catalog.load()
+                apps = result.apps
+                _state.update {
+                    it.copy(entries = catalog.entries(apps), user = result.user, loading = false, loadedOnce = true)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -97,16 +119,95 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     fun setQuery(q: String) = _state.update { it.copy(query = q) }
     fun consumeMessage() = _state.update { it.copy(message = null) }
     fun dismissPermissionDialog() = _state.update { it.copy(needsInstallPermission = false) }
-    private fun toast(msg: String) = _state.update { it.copy(message = msg) }
+    fun toast(msg: String) = _state.update { it.copy(message = msg) }
 
     fun back(): Boolean {
-        if (_state.value.screen == Screen.Home) return false
-        navigate(Screen.Home)
+        val target = when (val s = _state.value.screen) {
+            Screen.Home -> return false
+            is Screen.AdminApp -> Screen.Admin
+            Screen.Admin -> Screen.Account
+            is Screen.Detail, Screen.Settings, Screen.Account -> Screen.Home
+            else -> s
+        }
+        navigate(target)
         return true
     }
 
+    // --- Konto ---------------------------------------------------------------
+
+    fun login(username: String, password: String) = authCall {
+        api().login(username.trim(), password)
+    }
+
+    fun register(username: String, password: String, adminPassword: String) = authCall {
+        api().register(username.trim(), password, adminPassword)
+    }
+
+    private fun authCall(call: () -> Pair<String, UserInfo>) {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            try {
+                val (token, user) = withContext(Dispatchers.IO) { call() }
+                settings.sessionToken = token
+                _state.update { it.copy(user = user, busy = false) }
+                toast("Angemeldet als ${user.username}" + if (user.isAdmin) " (Admin)" else "")
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(busy = false) }
+                toast(e.message ?: "Fehler")
+            }
+        }
+    }
+
+    fun logout() {
+        val api = api()
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { runCatching { api.logout() } }
+            settings.sessionToken = ""
+            _state.update { it.copy(user = null, screen = Screen.Home) }
+            toast("Abgemeldet")
+            refresh()
+        }
+    }
+
+    // --- Einmal-Codes --------------------------------------------------------
+
+    fun requestRedeem(fullName: String? = null) {
+        if (_state.value.user == null) {
+            toast("Zum Einlösen eines Codes bitte zuerst anmelden oder registrieren")
+            navigate(Screen.Account)
+            return
+        }
+        _state.update { it.copy(showRedeem = true, redeemFor = fullName) }
+    }
+
+    fun dismissRedeem() = _state.update { it.copy(showRedeem = false, redeemFor = null) }
+
+    fun redeem(code: String) {
+        if (_state.value.busy) return
+        viewModelScope.launch {
+            _state.update { it.copy(busy = true) }
+            try {
+                val name = withContext(Dispatchers.IO) { api().redeem(code.trim()) }
+                _state.update { it.copy(busy = false, showRedeem = false, redeemFor = null) }
+                toast("$name ist jetzt freigeschaltet 🎉")
+                refresh()
+            } catch (e: Exception) {
+                _state.update { it.copy(busy = false) }
+                toast(e.message ?: "Fehler")
+            }
+        }
+    }
+
+    // --- Installation --------------------------------------------------------
+
     fun install(app: StoreApp) {
         if (_state.value.tasks.containsKey(app.fullName)) return
+        if (!app.unlocked) {
+            requestRedeem(app.fullName)
+            return
+        }
         if (!context.packageManager.canRequestPackageInstalls()) {
             _state.update { it.copy(needsInstallPermission = true) }
             return
@@ -137,7 +238,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         setTask(fullName, null)
     }
 
-    fun updateAll() = _state.value.updates.forEach { install(it.app) }
+    fun updateAll() = _state.value.updates.filter { it.app.unlocked }.forEach { install(it.app) }
 
     fun open(entry: AppEntry) {
         val pkg = entry.packageName ?: return
@@ -169,10 +270,14 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         context.startActivity(intent)
     }
 
-    fun saveSettings(server: String, token: String, owners: String, updateCheck: Boolean) {
-        settings.serverUrl = server
-        settings.token = token
-        settings.ownerFilter = owners
+    fun saveSettings(server: String, updateCheck: Boolean) {
+        val newUrl = StoreSettings.normalizeUrl(server)
+        if (newUrl != settings.serverUrl) {
+            // Anderer Server -> alte Anmeldung gilt dort nicht
+            settings.sessionToken = ""
+            _state.update { it.copy(user = null) }
+        }
+        settings.serverUrl = newUrl
         settings.updateCheckEnabled = updateCheck
         UpdateCheckWorker.schedule(context, updateCheck)
         navigate(Screen.Home)

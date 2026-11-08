@@ -2,30 +2,22 @@ package com.bytestreamdevelopment.applauncher.data
 
 import android.content.Context
 import androidx.core.content.edit
+import com.bytestreamdevelopment.applauncher.BuildConfig
 
-/** Einstellungen + Zuordnung Repo -> Paketname (in SharedPreferences). */
+/** Einstellungen, Anmeldung und Zuordnung Repo -> Paketname (in SharedPreferences). */
 class StoreSettings(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences("store", Context.MODE_PRIVATE)
 
+    /** Adresse des Store-Servers (nicht Forgejo selbst). */
     var serverUrl: String
-        get() = prefs.getString(KEY_SERVER, DEFAULT_SERVER) ?: DEFAULT_SERVER
-        set(value) = prefs.edit { putString(KEY_SERVER, value.trim().trimEnd('/').ifEmpty { DEFAULT_SERVER }) }
+        get() = prefs.getString(KEY_SERVER, null) ?: BuildConfig.DEFAULT_SERVER_URL
+        set(value) = prefs.edit { putString(KEY_SERVER, normalizeUrl(value)) }
 
-    /** Optionaler Forgejo-Zugangstoken (für private Repos). */
-    var token: String
-        get() = prefs.getString(KEY_TOKEN, "") ?: ""
-        set(value) = prefs.edit { putString(KEY_TOKEN, value.trim()) }
+    val isServerConfigured get() = serverUrl.isNotBlank()
 
-    /** Kommagetrennte Liste von Benutzern/Organisationen. Leer = alle. */
-    var ownerFilter: String
-        get() = prefs.getString(KEY_OWNERS, "") ?: ""
-        set(value) = prefs.edit { putString(KEY_OWNERS, value.trim()) }
-
-    val owners: Set<String>
-        get() = ownerFilter.split(',', ' ', ';')
-            .map { it.trim().lowercase() }
-            .filter { it.isNotEmpty() }
-            .toSet()
+    var sessionToken: String
+        get() = prefs.getString(KEY_SESSION, "") ?: ""
+        set(value) = prefs.edit { putString(KEY_SESSION, value) }
 
     var updateCheckEnabled: Boolean
         get() = prefs.getBoolean(KEY_UPDATE_CHECK, true)
@@ -42,12 +34,16 @@ class StoreSettings(context: Context) {
         prefs.edit { putString(PKG_PREFIX + fullName, packageName) }
 
     companion object {
-        const val DEFAULT_SERVER = "https://git.nebendahl.eu"
-        private const val KEY_SERVER = "server_url"
-        private const val KEY_TOKEN = "token"
-        private const val KEY_OWNERS = "owners"
+        private const val KEY_SERVER = "store_server_url"
+        private const val KEY_SESSION = "session_token"
         private const val KEY_UPDATE_CHECK = "update_check"
         private const val KEY_LAST_NOTIFIED = "last_notified"
         private const val PKG_PREFIX = "pkg:"
+
+        fun normalizeUrl(value: String): String {
+            val v = value.trim().trimEnd('/')
+            if (v.isEmpty()) return ""
+            return if (v.startsWith("http://") || v.startsWith("https://")) v else "https://$v"
+        }
     }
 }

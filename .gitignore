@@ -11,3 +11,10 @@ captures/
 keystore.properties
 *.jks
 *.keystore
+# Store-Server
+server/.env
+server/data/
+*.db
+*.db-wal
+*.db-shm
+__pycache__/

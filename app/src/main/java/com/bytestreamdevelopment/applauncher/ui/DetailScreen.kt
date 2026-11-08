@@ -75,12 +75,13 @@ fun DetailScreen(entry: AppEntry?, task: Task?, vm: StoreViewModel, snackbar: Sn
                     Text(app.name, style = MaterialTheme.typography.headlineSmall)
                     Text(app.owner, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                     Text(statusText(entry, task), style = MaterialTheme.typography.labelMedium)
+                    AccessBadge(app.access)
                 }
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ActionButton(entry, task, vm, Modifier.weight(1f))
-                if (entry.state is InstallState.UpdateAvailable && task == null) {
+                if (entry.state is InstallState.UpdateAvailable && task == null && app.unlocked) {
                     OutlinedButton(onClick = { vm.open(entry) }, modifier = Modifier.weight(1f)) { Text("Öffnen") }
                 }
                 if (entry.state !is InstallState.NotInstalled && task == null) {

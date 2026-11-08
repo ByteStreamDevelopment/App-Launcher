@@ -14,6 +14,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -50,6 +53,12 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
             TopAppBar(
                 title = { Text("App Store") },
                 actions = {
+                    if (state.user?.isAdmin == true) {
+                        IconButton(onClick = { vm.navigate(Screen.Admin) }) { Icon(Icons.Default.Build, "Admin-Bereich") }
+                    }
+                    IconButton(onClick = { vm.navigate(Screen.Account) }) {
+                        Icon(if (state.user != null) Icons.Default.AccountCircle else Icons.Default.Person, "Konto")
+                    }
                     IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, "Aktualisieren") }
                     IconButton(onClick = { vm.navigate(Screen.Settings) }) {
                         Icon(Icons.Default.Settings, "Einstellungen")
@@ -80,6 +89,15 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
             ) {
                 when {
                     !state.loadedOnce -> Centered { CircularProgressIndicator() }
+                    !state.serverConfigured -> Centered {
+                        Text("Willkommen!", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Trage zuerst die Adresse deines Store-Servers ein.",
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(8.dp),
+                        )
+                        Button(onClick = { vm.navigate(Screen.Settings) }) { Text("Einstellungen öffnen") }
+                    }
                     state.error != null && state.entries.isEmpty() -> Centered {
                         Text("Katalog konnte nicht geladen werden", style = MaterialTheme.typography.titleMedium)
                         Text(state.error, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
@@ -133,7 +151,7 @@ private fun AppList(state: UiState, vm: StoreViewModel) {
                 Text(
                     text = when (state.tab) {
                         Tab.Discover -> if (state.query.isBlank()) {
-                            "Keine Apps gefunden.\nEin Repo erscheint hier, sobald sein neuestes Release eine .apk-Datei enthält."
+                            "Keine Apps gefunden."
                         } else {
                             "Keine Treffer für „${state.query}“"
                         }
@@ -164,7 +182,16 @@ private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel) {
         AppIcon(entry, 52.dp)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(entry.app.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    entry.app.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                AccessBadge(entry.app.access)
+            }
             Text(
                 entry.app.description.ifBlank { entry.app.owner },
                 style = MaterialTheme.typography.bodySmall,

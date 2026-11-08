@@ -7,7 +7,7 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageInstaller
 import android.os.Build
 import com.bytestreamdevelopment.applauncher.data.ApiException
-import com.bytestreamdevelopment.applauncher.data.ForgejoApi
+import com.bytestreamdevelopment.applauncher.data.StoreApi
 import com.bytestreamdevelopment.applauncher.data.StoreApp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -20,7 +20,7 @@ object ApkInstaller {
     /** Lädt die APK herunter. [onProgress] erhält 0..1 oder null (Größe unbekannt). */
     suspend fun download(
         context: Context,
-        api: ForgejoApi,
+        api: StoreApi,
         app: StoreApp,
         onProgress: (Float?) -> Unit,
     ): File = withContext(Dispatchers.IO) {
@@ -29,10 +29,18 @@ object ApkInstaller {
         dir.listFiles()?.forEach { it.delete() }
         val file = File(dir, app.fullName.replace('/', '_') + ".apk")
 
-        val conn = api.openConnection(app.release.apk.downloadUrl)
+        val conn = api.openDownload(app.fullName, app.release.apk.name)
         try {
             val code = conn.responseCode
-            if (code !in 200..299) throw ApiException(code, "Download fehlgeschlagen ($code)")
+            if (code !in 200..299) {
+                val msg = when (code) {
+                    401 -> "Bitte zuerst anmelden"
+                    403 -> "Für diese App ist ein Freischalt-Code nötig"
+                    404 -> "App nicht (mehr) verfügbar"
+                    else -> "Download fehlgeschlagen ($code)"
+                }
+                throw ApiException(code, msg)
+            }
             val total = conn.contentLengthLong.takeIf { it > 0 } ?: app.release.apk.size.takeIf { it > 0 }
             conn.inputStream.use { input ->
                 file.outputStream().use { output ->

@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -31,18 +33,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.bytestreamdevelopment.applauncher.BuildConfig
-import com.bytestreamdevelopment.applauncher.data.StoreSettings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(vm: StoreViewModel) {
+fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
     val s = vm.settings
     var server by rememberSaveable { mutableStateOf(s.serverUrl) }
-    var token by rememberSaveable { mutableStateOf(s.token) }
-    var owners by rememberSaveable { mutableStateOf(s.ownerFilter) }
     var updateCheck by rememberSaveable { mutableStateOf(s.updateCheckEnabled) }
 
     Scaffold(
@@ -56,6 +54,7 @@ fun SettingsScreen(vm: StoreViewModel) {
                 },
             )
         },
+        snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(
             Modifier
@@ -65,33 +64,17 @@ fun SettingsScreen(vm: StoreViewModel) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Quelle", style = MaterialTheme.typography.titleMedium)
+            Text("Store-Server", style = MaterialTheme.typography.titleMedium)
             OutlinedTextField(
                 value = server,
                 onValueChange = { server = it },
-                label = { Text("Forgejo-Server") },
-                placeholder = { Text(StoreSettings.DEFAULT_SERVER) },
+                label = { Text("Server-Adresse") },
+                placeholder = { Text("https://store.example.de") },
+                supportingText = {
+                    Text("Adresse des App-Store-Servers (nicht Forgejo selbst). Welche Apps es gibt, legt der Admin dort fest.")
+                },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = owners,
-                onValueChange = { owners = it },
-                label = { Text("Nur diese Benutzer/Organisationen") },
-                placeholder = { Text("z. B. Manhunt, Mrcoolgamer11") },
-                supportingText = { Text("Kommagetrennt. Leer = alle Repos auf dem Server.") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                label = { Text("Zugangstoken (optional)") },
-                supportingText = { Text("Nur für private Repos nötig. Forgejo → Einstellungen → Anwendungen, Recht „read:repository“.") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -109,7 +92,8 @@ fun SettingsScreen(vm: StoreViewModel) {
             }
 
             Button(
-                onClick = { vm.saveSettings(server, token, owners, updateCheck) },
+                onClick = { vm.saveSettings(server, updateCheck) },
+                enabled = server.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Speichern") }
 

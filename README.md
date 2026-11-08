@@ -1,18 +1,86 @@
 # App Store (App-Launcher)
 
-Ein eigener kleiner App Store für Android, der deine selbst gebauten Apps direkt
-von deinem Forgejo-Server (**https://git.nebendahl.eu**) installiert und aktuell hält.
+Ein eigener kleiner App Store für Android, der deine selbst gebauten Apps von deinem
+Forgejo-Server (**https://git.nebendahl.eu**) installiert und aktuell hält – mit Admin-Bereich,
+Einmal-Codes und Benutzerverwaltung.
+
+```
+Android-App  ──►  Store-Server (server/)  ──►  Forgejo (git.nebendahl.eu)
+                  Benutzer, Admins, Freigaben,
+                  Einmal-Codes, APK-Downloads
+```
 
 ## Was er kann
 
-- **Entdecken**: Zeigt automatisch jedes Repo, dessen **neuestes Release** eine `.apk` enthält.
-- **Installieren / Aktualisieren / Öffnen / Deinstallieren** mit einem Tipp.
-- **Updates**: Vergleicht das Release-Tag (`v2.5.0`) mit der installierten Version (`versionName` = `2.5.0`).
-  „Alle aktualisieren“ in einem Rutsch.
-- **Hintergrund-Prüfung** alle 6 Stunden mit Benachrichtigung bei neuen Versionen.
-- Ab Android 12 laufen Updates von Apps, die der Store installiert hat, **ohne Bestätigungsdialog**.
-- Suche, Release-Notizen, Größe, Datum, Links zum Repo.
-- Optional: Filter auf bestimmte Benutzer/Organisationen und Token für private Repos.
+- **Entdecken**: Jedes Repo, dessen **neuestes Release** eine `.apk` enthält, erscheint automatisch.
+- **Installieren / Aktualisieren / Öffnen / Deinstallieren** mit einem Tipp, „Alle aktualisieren“.
+- **Updates**: Release-Tag (`v2.5.0`) wird mit der installierten Version (`2.5.0`) verglichen;
+  Hintergrund-Prüfung alle 6 Stunden mit Benachrichtigung.
+- **Konten**: Anmelden/Registrieren. Ohne Konto sind alle offenen Apps nutzbar.
+- **Admin-Bereich** (nur für Admins):
+  - pro App die Freigabe wählen: **Offen** (jeder), **Mit Code** (nur nach Einlösen eines Einmal-Codes),
+    **Versteckt** (nur Admins)
+  - **Einmal-Codes** erzeugen (mit Notiz, z. B. „für Anna“), teilen, kopieren, löschen, sehen wer sie eingelöst hat
+  - **Benutzerverwaltung**: andere zu Admins machen/zurückstufen, Konten löschen, Freischaltungen entziehen
+- **Haupt-Admin** ist `ProfImpossible`. Dieses Konto lässt sich nur mit dem **Admin-Passwort** registrieren,
+  kann nie zurückgestuft oder gelöscht werden.
+
+## Einmal-Codes – so funktioniert's
+
+1. Admin stellt eine App auf **Mit Code** und erzeugt einen Code (z. B. `K7QM-3XPA`).
+2. Code an die Person schicken (Teilen-Knopf).
+3. Die Person registriert sich in der App und tippt bei der App auf **Code** (oder Konto → „Freischalt-Code einlösen“).
+4. Der Code ist danach verbraucht; die App bleibt für dieses Konto **dauerhaft** freigeschaltet, inkl. Updates.
+
+> **Wichtig:** Ist das Repo auf Forgejo **öffentlich**, kann jeder die APK dort direkt herunterladen.
+> Für echten Schutz das Repo auf **privat** stellen und dem Store-Server einen Forgejo-Token geben –
+> dann kommt man nur noch über den Store (und mit Code) an die APK.
+
+## Store-Server einrichten
+
+Liegt in [`server/`](server/), nur Python-Standardbibliothek + SQLite, am einfachsten per Docker:
+
+```bash
+cd server
+cp .env.example .env      # ADMIN_PASSWORD und FORGEJO_TOKEN eintragen
+docker compose up -d --build
+```
+
+Der Server läuft dann auf Port `8080`. Am besten hinter deinen bestehenden Reverse-Proxy hängen
+(z. B. `https://store.nebendahl.eu` → `http://localhost:8080`) und in `.env` `TRUST_PROXY=1` setzen.
+Die Datenbank liegt in `server/data/store.db` (Backup = diese Datei kopieren).
+
+| Variable | Bedeutung |
+|---|---|
+| `FORGEJO_URL` | Forgejo-Adresse, Standard `https://git.nebendahl.eu` |
+| `FORGEJO_TOKEN` | Token mit `read:repository` – nötig für private Repos |
+| `ADMIN_USERNAME` | Haupt-Admin, Standard `ProfImpossible` |
+| `ADMIN_PASSWORD` | Passwort, das zum Registrieren des Haupt-Admins nötig ist |
+| `OWNERS` | optional: nur Repos dieser Benutzer/Orgs (kommagetrennt) |
+| `DEFAULT_ACCESS` | Freigabe neu entdeckter Apps: `open`, `code` oder `hidden` |
+| `TRUST_PROXY` | `1` hinter Reverse-Proxy (echte IP für die Fehlversuch-Bremse) |
+
+Ohne Docker: `cd server && ADMIN_PASSWORD=... python3 store_server.py`
+
+Tests: `python3 -m unittest discover -s server/tests`
+
+### Erste Schritte nach dem Start
+
+1. App installieren, in den Einstellungen die Server-Adresse eintragen.
+2. Konto → **Registrieren** mit Benutzername `ProfImpossible`, eigenem Passwort und dem **Admin-Passwort**.
+3. Oben erscheint das Werkzeug-Symbol → Admin-Bereich.
+
+### Server-API (Kurzfassung)
+
+| Methode & Pfad | Wer | Zweck |
+|---|---|---|
+| `POST /api/register`, `POST /api/login`, `POST /api/logout`, `GET /api/me` | alle | Konto |
+| `GET /api/apps` | alle | Katalog (für den Benutzer gefiltert) |
+| `GET /api/apps/{owner}/{repo}/download?asset=` | Berechtigte | APK |
+| `POST /api/redeem` | angemeldet | Einmal-Code einlösen |
+| `GET /api/admin/apps`, `PUT /api/admin/apps/{owner}/{repo}` | Admin | Apps & Freigabe |
+| `GET/POST /api/admin/apps/{owner}/{repo}/codes`, `DELETE /api/admin/codes/{code}` | Admin | Codes |
+| `GET /api/admin/users`, `PUT/DELETE /api/admin/users/{id}`, `DELETE /api/admin/users/{id}/unlocks/{owner}/{repo}` | Admin | Benutzer |
 
 ## So veröffentlichst du eine App im Store
 
@@ -60,6 +128,8 @@ keyPassword=...
 
 Version beim Bauen setzen: `./gradlew assembleRelease -PappVersionName=1.1.0 -PappVersionCode=2`
 
+Server-Adresse fest einbauen (spart das Eintippen): `./gradlew assembleRelease -PstoreServerUrl=https://store.nebendahl.eu`
+
 ### Der Store aktualisiert sich selbst
 
 Lege für den Store selbst ein Repo auf deinem Forgejo an und veröffentliche seine APK als Release –
@@ -69,13 +139,16 @@ dann taucht er in seiner eigenen Liste auf und kann sich selbst aktualisieren.
 
 | Datei | Aufgabe |
 |---|---|
-| `data/ForgejoApi.kt` | Forgejo-API: Repos suchen, neuestes Release holen |
-| `data/Catalog.kt` | Katalog aufbauen, APK auswählen, Installationsstatus bestimmen |
+| `server/store_server.py` | Store-Server: Forgejo-Abruf, Benutzer, Freigaben, Codes, Downloads |
+| `data/StoreApi.kt` | Client für den Store-Server |
+| `data/Catalog.kt` | Katalog laden, APK auswählen, Installationsstatus bestimmen |
 | `data/Versions.kt` | Versionsvergleich Tag ↔ installierte Version |
-| `data/StoreSettings.kt` | Einstellungen, Zuordnung Repo → Paketname |
+| `data/StoreSettings.kt` | Server-Adresse, Sitzung, Zuordnung Repo → Paketname |
 | `install/ApkInstaller.kt` | Download mit Fortschritt, Installation per `PackageInstaller` |
 | `install/InstallResultReceiver.kt` | Ergebnis der Installation / Bestätigungsdialog |
 | `work/UpdateCheckWorker.kt` | Hintergrund-Prüfung + Benachrichtigung |
-| `ui/*` | Oberfläche (Jetpack Compose, Material 3) |
+| `ui/AccountScreen.kt` | Anmelden / Registrieren / Code einlösen |
+| `ui/AdminScreens.kt`, `ui/AdminViewModel.kt` | Admin-Bereich: Freigaben, Codes, Benutzer |
+| `ui/*` | übrige Oberfläche (Jetpack Compose, Material 3) |
 
-Benutzte API-Endpunkte: `GET /api/v1/repos/search`, `GET /api/v1/repos/{owner}/{repo}/releases/latest`.
+Der Server nutzt von Forgejo: `GET /api/v1/repos/search`, `GET /api/v1/repos/{owner}/{repo}/releases/latest`.

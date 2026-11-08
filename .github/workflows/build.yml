@@ -20,3 +20,13 @@ jobs:
         with:
           name: app-store-apk
           path: app/build/outputs/apk/release/*.apk
+
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Server-Tests
+        run: python -m unittest discover -s server/tests -v
