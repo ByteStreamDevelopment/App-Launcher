@@ -98,6 +98,18 @@ fun DetailScreen(entry: AppEntry?, task: Task?, state: UiState, vm: StoreViewMod
                 TextButton(onClick = { vm.requestRedeem(app.fullName) }) { Text("Ich habe einen Gutschein-Code") }
             }
 
+            if (app.ratingCount > 0) {
+                Text(
+                    "${stars(app.ratingAverage)}  %.1f · %d Bewertung%s".format(
+                        app.ratingAverage, app.ratingCount, if (app.ratingCount != 1) "en" else "",
+                    ),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            ScreenshotGallery(app.screenshots)
+
             if (app.description.isNotBlank()) {
                 Text(app.description, style = MaterialTheme.typography.bodyLarge)
             }
@@ -128,6 +140,8 @@ fun DetailScreen(entry: AppEntry?, task: Task?, state: UiState, vm: StoreViewMod
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
+
+            ReviewsSection(app, state, vm)
 
             FlowRow {
                 if (app.homepage.isNotBlank()) TextButton(onClick = { vm.openUrl(app.homepage) }) { Text("Webseite") }

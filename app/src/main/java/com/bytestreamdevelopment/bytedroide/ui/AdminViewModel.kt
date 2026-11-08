@@ -7,6 +7,7 @@ import com.bytestreamdevelopment.bytedroide.data.AdminOverview
 import com.bytestreamdevelopment.bytedroide.data.AdminPurchase
 import com.bytestreamdevelopment.bytedroide.data.AdminUser
 import com.bytestreamdevelopment.bytedroide.data.DevApp
+import com.bytestreamdevelopment.bytedroide.data.PendingRelease
 import com.bytestreamdevelopment.bytedroide.data.Role
 import com.bytestreamdevelopment.bytedroide.data.StoreApi
 import com.bytestreamdevelopment.bytedroide.data.StoreSettings
@@ -27,6 +28,7 @@ data class AdminState(
     val apps: List<DevApp> = emptyList(),
     val users: List<AdminUser> = emptyList(),
     val purchases: List<AdminPurchase> = emptyList(),
+    val pendingReleases: List<PendingRelease> = emptyList(),
 )
 
 class AdminViewModel(application: Application) : AndroidViewModel(application) {
@@ -39,7 +41,7 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     /** Wird nach Änderungen aufgerufen, damit der Store-Katalog neu lädt. */
     var onCatalogChanged: () -> Unit = {}
 
-    private fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null })
+    private fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null }, settings.installId)
 
     fun selectTab(tab: AdminTab) {
         _state.update { it.copy(tab = tab) }
@@ -51,7 +53,8 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
         val overview = api.overview()
         val apps = api.adminApps(refreshCatalog)
         val users = api.users()
-        _state.update { it.copy(overview = overview, apps = apps, users = users) }
+        val pending = runCatching { api.pendingReleases() }.getOrDefault(emptyList())
+        _state.update { it.copy(overview = overview, apps = apps, users = users, pendingReleases = pending) }
         if (refreshCatalog) onCatalogChanged()
     }
 
@@ -65,6 +68,13 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
             .put("review_note", note))
         refreshQuietly()
         onMessage(if (approve) "${app.name} freigegeben" else "${app.name} abgelehnt")
+        onCatalogChanged()
+    }
+
+    fun decideRelease(release: PendingRelease, approve: Boolean, note: String = "") = run {
+        api().decideRelease(release, approve, note)
+        refreshQuietly()
+        onMessage("${release.name} ${release.version}: " + if (approve) "freigegeben" else "abgelehnt")
         onCatalogChanged()
     }
 
@@ -106,8 +116,12 @@ class AdminViewModel(application: Application) : AndroidViewModel(application) {
     private fun refreshQuietly() {
         runCatching {
             val api = api()
-            Triple(api.overview(), api.adminApps(false), api.users())
-        }.onSuccess { (o, a, u) -> _state.update { it.copy(overview = o, apps = a, users = u) } }
+            val overview = api.overview()
+            val apps = api.adminApps(false)
+            val users = api.users()
+            val pending = api.pendingReleases()
+            _state.update { it.copy(overview = overview, apps = apps, users = users, pendingReleases = pending) }
+        }
     }
 
     private fun run(showLoading: Boolean = false, block: suspend () -> Unit) {

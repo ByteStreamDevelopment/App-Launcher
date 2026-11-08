@@ -173,6 +173,30 @@ private fun Profile(user: UserInfo, state: UiState, vm: StoreViewModel, open: (A
     }
 
     HorizontalDivider()
+    SectionTitle("Push-Benachrichtigungen (ntfy)")
+    SwitchRow(
+        "Push über ntfy",
+        "Sofort-Benachrichtigungen aufs Handy – ohne Google. Dafür die kostenlose App „ntfy“ installieren.",
+        user.ntfyTopic.isNotBlank(),
+    ) { vm.setNtfy(it) }
+    if (user.ntfyTopic.isNotBlank()) {
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("1. ntfy installieren (F-Droid oder Play Store)\n2. „In ntfy abonnieren“ tippen\n3. Fertig ✓",
+                    style = MaterialTheme.typography.bodySmall)
+                Hint("Dein persönliches Thema: ${user.ntfyTopic}\nWie ein Passwort behandeln – wer es kennt, kann mitlesen.")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { vm.openNtfy(user.ntfyTopic) }) { Text("In ntfy abonnieren") }
+                    OutlinedButton(onClick = vm::testNtfy, enabled = !state.busy) { Text("Test senden") }
+                }
+                TextButton(onClick = { vm.setNtfy(true) }, contentPadding = PaddingValues(0.dp)) {
+                    Text("Neues Thema erzeugen")
+                }
+            }
+        }
+    }
+
+    HorizontalDivider()
     SectionTitle("Konto")
     TextButton(onClick = { open(AccountDialog.Email) }) { Text("E-Mail-Adresse ändern") }
     TextButton(onClick = { open(AccountDialog.Password) }) { Text("Passwort ändern") }

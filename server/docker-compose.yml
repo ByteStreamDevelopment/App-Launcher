@@ -25,6 +25,21 @@ services:
     networks:
       - reverse-proxy
 
+  # Optionaler Virenscan: docker compose --profile clamav up -d  (braucht ca. 1,5 GB RAM)
+  # und in der .env CLAMAV_HOST=clamav setzen
+  clamav:
+    image: clamav/clamav:stable
+    container_name: bytedroide-clamav
+    profiles: ["clamav"]
+    restart: unless-stopped
+    volumes:
+      - clamav-db:/var/lib/clamav
+    networks:
+      - reverse-proxy
+
 networks:
   reverse-proxy:
     external: true
+
+volumes:
+  clamav-db:

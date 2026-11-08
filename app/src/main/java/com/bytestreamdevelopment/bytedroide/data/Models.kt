@@ -67,6 +67,9 @@ data class StoreApp(
     val canManage: Boolean,
     /** Paketname laut Server (nur bei hochgeladenen Apps bekannt). */
     val packageName: String? = null,
+    val ratingAverage: Double = 0.0,
+    val ratingCount: Int = 0,
+    val screenshots: List<String> = emptyList(),
 ) {
     val isPaid get() = priceCents > 0
     val isBetaRelease get() = release.channel == "beta"
@@ -96,6 +99,8 @@ data class UserInfo(
     val devRequested: Boolean,
     val notifyUpdates: Boolean,
     val notifyNews: Boolean,
+    /** ntfy-Thema für Push-Benachrichtigungen (leer = aus) */
+    val ntfyTopic: String = "",
 ) {
     val isAdmin get() = role == Role.Admin
     val isDeveloper get() = role == Role.Developer || role == Role.Admin
@@ -166,6 +171,14 @@ data class DevApp(
     val codesUsed: Int,
     val testers: Int,
     val unlockedUsers: Int,
+    val screenshots: List<Screenshot> = emptyList(),
+    /** Versionen, die auf Admin-Prüfung warten */
+    val pendingVersions: List<String> = emptyList(),
+    /** Abgelehnte oder vom Virenscan gesperrte Versionen */
+    val blockedVersions: List<String> = emptyList(),
+    val ratingAverage: Double = 0.0,
+    val ratingCount: Int = 0,
+    val reviewReleases: Boolean = false,
 ) {
     val isUpload get() = sourceType == "upload"
     val reviewLabel
@@ -184,6 +197,47 @@ data class DevRelease(
     val channel: String,
     val size: Long,
     val createdAt: Long,
+    /** approved | pending | rejected */
+    val status: String = "approved",
+    /** Prozent der Nutzer, die diese Version bekommen */
+    val rollout: Int = 100,
+    /** clean | unscanned | "" */
+    val scan: String = "",
+    val reviewNote: String = "",
+)
+
+data class Screenshot(val id: Long, val url: String)
+
+data class Review(
+    val userId: Long,
+    val username: String,
+    val rating: Int,
+    val text: String,
+    val version: String,
+    val updatedAt: Long,
+    val reply: String,
+    val mine: Boolean,
+)
+
+data class ReviewList(
+    val average: Double,
+    val count: Int,
+    /** Anzahl je Sterne, Reihenfolge 5,4,3,2,1 */
+    val distribution: List<Int>,
+    val reviews: List<Review>,
+    val canReview: Boolean,
+    val canReply: Boolean,
+    val mine: Review?,
+)
+
+data class PendingRelease(
+    val app: String,
+    val name: String,
+    val developer: String?,
+    val channel: String,
+    val version: String,
+    val notes: String,
+    val releaseId: Long?,
 )
 
 data class Tester(val id: Long, val username: String, val joinedAt: Long)
@@ -219,6 +273,9 @@ data class AdminOverview(
     val mailEnabled: Boolean,
     val paymentsEnabled: Boolean,
     val legalMissing: List<String>,
+    val releasesPending: Int = 0,
+    val reviewReleases: Boolean = false,
+    val scannerEnabled: Boolean = false,
 )
 
 data class AdminPurchase(

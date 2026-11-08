@@ -44,7 +44,7 @@ class DevViewModel(application: Application) : AndroidViewModel(application) {
     var onMessage: (String) -> Unit = {}
     var onCatalogChanged: () -> Unit = {}
 
-    private fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null })
+    private fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null }, settings.installId)
 
     fun loadApps() = run(showLoading = true) {
         val apps = api().devApps()
@@ -99,7 +99,7 @@ class DevViewModel(application: Application) : AndroidViewModel(application) {
         onCatalogChanged()
     }
 
-    fun uploadApk(fullName: String, uri: Uri, channel: String, notes: String) {
+    fun uploadApk(fullName: String, uri: Uri, channel: String, notes: String, rollout: Int = 100) {
         if (_state.value.upload != null) return
         viewModelScope.launch {
             _state.update { it.copy(upload = 0f) }
@@ -109,7 +109,7 @@ class DevViewModel(application: Application) : AndroidViewModel(application) {
                     val input = context.contentResolver.openInputStream(uri)
                         ?: throw IllegalStateException("Datei nicht lesbar")
                     input.use { stream ->
-                        api().uploadRelease(fullName, stream, size, channel, notes.trim()) { p ->
+                        api().uploadRelease(fullName, stream, size, channel, notes.trim(), rollout) { p ->
                             _state.update { it.copy(upload = p) }
                         }
                     }
@@ -133,6 +133,29 @@ class DevViewModel(application: Application) : AndroidViewModel(application) {
         api().uploadIcon(fullName, data)
         reload(fullName)
         onMessage("Icon gespeichert")
+        onCatalogChanged()
+    }
+
+    fun setRollout(fullName: String, release: DevRelease, rollout: Int) = run(showLoading = true) {
+        api().setRollout(fullName, release.id, rollout)
+        reload(fullName)
+        onMessage(if (rollout == 100) "Version ${release.version} jetzt für alle" else "Version ${release.version}: $rollout %")
+        onCatalogChanged()
+    }
+
+    fun addScreenshot(fullName: String, uri: Uri) = run(showLoading = true) {
+        val size = fileSize(uri) ?: 0
+        if (size > 3 * 1024 * 1024) throw IllegalStateException("Screenshot ist größer als 3 MB")
+        val data = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            ?: throw IllegalStateException("Datei nicht lesbar")
+        api().addScreenshot(fullName, data)
+        reload(fullName)
+        onCatalogChanged()
+    }
+
+    fun deleteScreenshot(fullName: String, id: Long) = run {
+        api().deleteScreenshot(fullName, id)
+        reload(fullName)
         onCatalogChanged()
     }
 

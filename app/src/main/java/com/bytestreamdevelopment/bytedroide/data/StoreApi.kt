@@ -11,7 +11,7 @@ import java.net.URLEncoder
 class ApiException(val code: Int, message: String) : IOException(message)
 
 /** Client für den eigenen Store-Server (siehe server/store_server.py). */
-class StoreApi(baseUrl: String, private val token: String?) {
+class StoreApi(baseUrl: String, private val token: String?, private val installId: String? = null) {
     private val base = baseUrl.trimEnd('/')
 
     // --- Katalog & Konto ---------------------------------------------------
@@ -101,6 +101,39 @@ class StoreApi(baseUrl: String, private val token: String?) {
         request("POST", "/api/apps/${appPath(fullName)}/purchase", JSONObject().put("accept_waiver", true))
             .getString("checkout_url")
 
+    // --- Bewertungen ----------------------------------------------------------
+
+    fun reviews(fullName: String): ReviewList = parseReviews(request("GET", "/api/apps/${appPath(fullName)}/reviews"))
+
+    fun setReview(fullName: String, rating: Int, text: String): ReviewList = parseReviews(
+        request("PUT", "/api/apps/${appPath(fullName)}/reviews", JSONObject().put("rating", rating).put("text", text)),
+    )
+
+    fun deleteReview(fullName: String): ReviewList =
+        parseReviews(request("DELETE", "/api/apps/${appPath(fullName)}/reviews"))
+
+    fun replyReview(fullName: String, userId: Long, text: String): ReviewList = parseReviews(
+        request("PUT", "/api/dev/apps/${appPath(fullName)}/reviews/$userId/reply", JSONObject().put("text", text)),
+    )
+
+    fun adminDeleteReview(fullName: String, userId: Long) {
+        request("DELETE", "/api/admin/apps/${appPath(fullName)}/reviews/$userId")
+    }
+
+    // --- Push über ntfy -----------------------------------------------------
+
+    /** Schaltet ntfy-Push an/aus. Liefert Benutzer + Adresse des Themas zum Abonnieren. */
+    fun setNtfy(enable: Boolean): Pair<UserInfo, String> {
+        val body = request("POST", "/api/me/ntfy", JSONObject().put("enable", enable))
+        return parseUser(body.getJSONObject("user")) to body.optString("ntfy_url")
+    }
+
+    fun testNtfy() {
+        request("POST", "/api/me/ntfy/test", JSONObject())
+    }
+
+    fun info(): JSONObject = request("GET", "/api/info")
+
     fun openDownload(fullName: String, asset: String): HttpURLConnection =
         open("GET", "${base}/api/apps/${appPath(fullName)}/download?asset=${enc(asset)}")
 
@@ -129,8 +162,24 @@ class StoreApi(baseUrl: String, private val token: String?) {
                 channel = it.optString("channel"),
                 size = it.optLong("size"),
                 createdAt = it.optLong("created_at"),
+                status = it.optString("status", "approved"),
+                rollout = it.optInt("rollout", 100),
+                scan = it.optString("scan"),
+                reviewNote = it.optString("review_note"),
             )
         }
+
+    fun setRollout(fullName: String, id: Long, rollout: Int) {
+        request("PUT", "/api/dev/apps/${appPath(fullName)}/releases/$id", JSONObject().put("rollout", rollout))
+    }
+
+    fun addScreenshot(fullName: String, data: ByteArray) {
+        upload("POST", "$base/api/dev/apps/${appPath(fullName)}/screenshots", data)
+    }
+
+    fun deleteScreenshot(fullName: String, id: Long) {
+        request("DELETE", "/api/dev/apps/${appPath(fullName)}/screenshots/$id")
+    }
 
     fun deleteRelease(fullName: String, id: Long) {
         request("DELETE", "/api/dev/apps/${appPath(fullName)}/releases/$id")
@@ -143,9 +192,11 @@ class StoreApi(baseUrl: String, private val token: String?) {
         size: Long,
         channel: String,
         notes: String,
+        rollout: Int = 100,
         onProgress: (Float) -> Unit,
     ): String {
-        val url = "$base/api/dev/apps/${appPath(fullName)}/releases?channel=${enc(channel)}&notes=${enc(notes)}"
+        val url = "$base/api/dev/apps/${appPath(fullName)}/releases?channel=${enc(channel)}&notes=${enc(notes)}" +
+            "&rollout=$rollout"
         val conn = open("POST", url)
         conn.readTimeout = 300_000
         conn.doOutput = true
@@ -170,7 +221,11 @@ class StoreApi(baseUrl: String, private val token: String?) {
     }
 
     fun uploadIcon(fullName: String, data: ByteArray) {
-        val conn = open("POST", "$base/api/dev/apps/${appPath(fullName)}/icon")
+        upload("POST", "$base/api/dev/apps/${appPath(fullName)}/icon", data)
+    }
+
+    private fun upload(method: String, url: String, data: ByteArray) {
+        val conn = open(method, url)
         conn.doOutput = true
         conn.setFixedLengthStreamingMode(data.size)
         conn.setRequestProperty("Content-Type", "application/octet-stream")
@@ -233,6 +288,9 @@ class StoreApi(baseUrl: String, private val token: String?) {
             legalMissing = (it.optJSONArray("legal_missing") ?: JSONArray()).let { a ->
                 (0 until a.length()).map(a::getString)
             },
+            releasesPending = it.optInt("releases_pending"),
+            reviewReleases = it.optBoolean("review_releases"),
+            scannerEnabled = it.optBoolean("scanner_enabled"),
         )
     }
 
@@ -283,6 +341,26 @@ class StoreApi(baseUrl: String, private val token: String?) {
             )
         }
 
+    fun pendingReleases(): List<PendingRelease> =
+        request("GET", "/api/admin/releases").getJSONArray("releases").objects().map {
+            PendingRelease(
+                app = it.getString("app"),
+                name = it.optString("name"),
+                developer = it.optStringOrNull("developer"),
+                channel = it.optString("channel"),
+                version = it.optString("version"),
+                notes = it.optString("notes"),
+                releaseId = if (it.isNull("release_id")) null else it.optLong("release_id"),
+            )
+        }
+
+    fun decideRelease(release: PendingRelease, approve: Boolean, note: String) {
+        val body = JSONObject().put("app", release.app).put("channel", release.channel).put("approve", approve)
+            .put("note", note)
+        release.releaseId?.let { body.put("release_id", it) }
+        request("POST", "/api/admin/releases/decide", body)
+    }
+
     fun refund(purchaseId: Long) {
         request("POST", "/api/admin/purchases/$purchaseId/refund", JSONObject())
     }
@@ -330,6 +408,7 @@ class StoreApi(baseUrl: String, private val token: String?) {
         conn.setRequestProperty("Accept", "application/json")
         conn.setRequestProperty("User-Agent", "ByteDroide")
         if (!token.isNullOrBlank()) conn.setRequestProperty("Authorization", "Bearer $token")
+        if (!installId.isNullOrBlank()) conn.setRequestProperty("X-Install-Id", installId)
         return conn
     }
 
@@ -347,9 +426,10 @@ class StoreApi(baseUrl: String, private val token: String?) {
             devRequested = o.optBoolean("dev_requested"),
             notifyUpdates = o.optBoolean("notify_updates", true),
             notifyNews = o.optBoolean("notify_news"),
+            ntfyTopic = o.optString("ntfy_topic"),
         )
 
-        private fun JSONObject.optStringOrNull(key: String) =
+        fun JSONObject.optStringOrNull(key: String) =
             if (isNull(key)) null else optString(key).ifBlank { null }
 
         fun parseDevApp(o: JSONObject) = DevApp(
@@ -380,8 +460,40 @@ class StoreApi(baseUrl: String, private val token: String?) {
             codesUsed = o.optInt("codes_used"),
             testers = o.optInt("testers"),
             unlockedUsers = o.optInt("unlocked_users"),
+            screenshots = (o.optJSONArray("screenshots") ?: JSONArray()).objects()
+                .map { Screenshot(it.getLong("id"), it.getString("url")) },
+            pendingVersions = (o.optJSONArray("pending_versions") ?: JSONArray()).strings(),
+            blockedVersions = (o.optJSONArray("blocked_versions") ?: JSONArray()).strings(),
+            ratingAverage = o.optJSONObject("rating")?.optDouble("average", 0.0) ?: 0.0,
+            ratingCount = o.optJSONObject("rating")?.optInt("count") ?: 0,
+            reviewReleases = o.optBoolean("review_releases"),
         )
+
+        fun parseReviews(o: JSONObject): ReviewList {
+            fun review(r: JSONObject) = Review(
+                userId = r.getLong("user_id"),
+                username = r.optString("username"),
+                rating = r.optInt("rating"),
+                text = r.optString("text"),
+                version = r.optString("version"),
+                updatedAt = r.optLong("updated_at"),
+                reply = r.optString("reply"),
+                mine = r.optBoolean("mine"),
+            )
+            val dist = o.optJSONArray("distribution") ?: JSONArray()
+            return ReviewList(
+                average = o.optDouble("average", 0.0),
+                count = o.optInt("count"),
+                distribution = (0 until dist.length()).map { dist.getInt(it) },
+                reviews = (o.optJSONArray("reviews") ?: JSONArray()).objects().map(::review),
+                canReview = o.optBoolean("can_review"),
+                canReply = o.optBoolean("can_reply"),
+                mine = o.optJSONObject("mine")?.let(::review),
+            )
+        }
     }
 }
 
 private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
+
+private fun JSONArray.strings(): List<String> = (0 until length()).map { getString(it) }

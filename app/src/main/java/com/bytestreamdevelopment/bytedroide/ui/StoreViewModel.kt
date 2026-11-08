@@ -10,6 +10,7 @@ import com.bytestreamdevelopment.bytedroide.data.AppEntry
 import com.bytestreamdevelopment.bytedroide.data.Catalog
 import com.bytestreamdevelopment.bytedroide.data.InstallState
 import com.bytestreamdevelopment.bytedroide.data.Purchase
+import com.bytestreamdevelopment.bytedroide.data.ReviewList
 import com.bytestreamdevelopment.bytedroide.data.StoreApp
 import com.bytestreamdevelopment.bytedroide.data.StoreSettings
 import com.bytestreamdevelopment.bytedroide.data.UserInfo
@@ -68,6 +69,10 @@ data class UiState(
     /** App, für die der Kauf-Dialog offen ist */
     val buyFor: String? = null,
     val purchases: List<Purchase> = emptyList(),
+    /** Geladene Bewertungen je App */
+    val reviews: Map<String, ReviewList> = emptyMap(),
+    /** Adresse des ntfy-Themas (nach dem Einschalten zum Abonnieren) */
+    val ntfyUrl: String = "",
     val busy: Boolean = false,
 ) {
     val screen: Screen get() = stack.last()
@@ -148,10 +153,14 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     fun dismissPermissionDialog() = _state.update { it.copy(needsInstallPermission = false) }
     fun toast(msg: String) = _state.update { it.copy(message = msg) }
 
-    /** bytedroide://app/{owner}/{name} öffnet die Detailseite. */
+    /** bytedroide://app/{owner}/{name} oder https://apps.nebendahl.eu/app/{owner}/{name} öffnet die Detailseite. */
     fun openDeepLink(uri: Uri) {
-        if (uri.scheme != "bytedroide" || uri.host != "app") return
-        val segments = uri.pathSegments
+        val segments = when {
+            uri.scheme == "bytedroide" && uri.host == "app" -> uri.pathSegments
+            uri.scheme == "https" && uri.host == Uri.parse(StoreSettings.SERVER_URL).host &&
+                uri.pathSegments.firstOrNull() == "app" -> uri.pathSegments.drop(1)
+            else -> return
+        }
         if (segments.size >= 2) navigate(Screen.Detail("${segments[0]}/${segments[1]}"))
     }
 
@@ -265,6 +274,54 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun withdraw(purchase: Purchase) = action("Widerruf eingegangen – die Bestätigung kommt per E-Mail",
         after = { loadPurchases(); refresh() }) { api().withdraw(purchase.id) }
+
+    // --- Bewertungen ----------------------------------------------------------
+
+    fun loadReviews(fullName: String) = viewModelScope.launch {
+        runCatching { withContext(Dispatchers.IO) { api().reviews(fullName) } }
+            .onSuccess { list -> _state.update { it.copy(reviews = it.reviews + (fullName to list)) } }
+    }
+
+    private fun reviewAction(fullName: String, success: String, call: () -> ReviewList) = action(success, after = {
+        refresh()
+    }) {
+        val list = call()
+        _state.update { it.copy(reviews = it.reviews + (fullName to list)) }
+    }
+
+    fun setReview(fullName: String, rating: Int, text: String) =
+        reviewAction(fullName, "Danke für deine Bewertung!") { api().setReview(fullName, rating, text.trim()) }
+
+    fun deleteReview(fullName: String) =
+        reviewAction(fullName, "Bewertung gelöscht") { api().deleteReview(fullName) }
+
+    fun replyReview(fullName: String, userId: Long, text: String) =
+        reviewAction(fullName, "Antwort gespeichert") { api().replyReview(fullName, userId, text.trim()) }
+
+    fun adminDeleteReview(fullName: String, userId: Long) = action("Bewertung entfernt", after = {
+        loadReviews(fullName)
+        refresh()
+    }) { api().adminDeleteReview(fullName, userId) }
+
+    // --- Push über ntfy -------------------------------------------------------
+
+    fun setNtfy(enable: Boolean) = action(if (enable) "Push eingeschaltet – jetzt in ntfy abonnieren" else "Push ausgeschaltet") {
+        val (user, url) = api().setNtfy(enable)
+        _state.update { it.copy(user = user, ntfyUrl = url) }
+    }
+
+    fun testNtfy() = action("Test-Nachricht gesendet") { api().testNtfy() }
+
+    /** Öffnet das Thema – die ntfy-App fängt den Link ab, sonst die ntfy-Webseite zum Abonnieren. */
+    fun openNtfy(topic: String) {
+        val known = _state.value.ntfyUrl
+        if (known.isNotBlank()) return openUrl(known)
+        viewModelScope.launch {
+            val base = runCatching { withContext(Dispatchers.IO) { api().info().optString("ntfy_url") } }
+                .getOrNull()?.ifBlank { null } ?: "https://ntfy.sh"
+            openUrl("$base/$topic")
+        }
+    }
 
     // --- Codes, Beta, Kauf ---------------------------------------------------
 

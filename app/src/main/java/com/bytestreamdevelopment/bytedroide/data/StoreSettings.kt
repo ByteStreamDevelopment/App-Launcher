@@ -23,6 +23,12 @@ class StoreSettings(context: Context) {
         get() = prefs.getString(KEY_LAST_NOTIFIED, "") ?: ""
         set(value) = prefs.edit { putString(KEY_LAST_NOTIFIED, value) }
 
+    /** Zufällige, stabile Kennung dieser Installation (für gestaffelte Rollouts, ohne Personenbezug). */
+    val installId: String
+        get() = prefs.getString(KEY_INSTALL_ID, null) ?: java.util.UUID.randomUUID().toString().also {
+            prefs.edit { putString(KEY_INSTALL_ID, it) }
+        }
+
     fun packageFor(fullName: String): String? = prefs.getString(PKG_PREFIX + fullName, null)
 
     fun rememberPackage(fullName: String, packageName: String) =
@@ -34,5 +40,6 @@ class StoreSettings(context: Context) {
         private const val KEY_UPDATE_CHECK = "update_check"
         private const val KEY_LAST_NOTIFIED = "last_notified"
         private const val PKG_PREFIX = "pkg:"
+        private const val KEY_INSTALL_ID = "install_id"
     }
 }

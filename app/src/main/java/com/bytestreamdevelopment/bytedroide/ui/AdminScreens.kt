@@ -70,7 +70,8 @@ fun AdminScreen(me: UserInfo?, admin: AdminViewModel, vm: StoreViewModel, snackb
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
-            val requests = state.users.count { it.user.devRequested } + state.apps.count { it.review == "pending" }
+            val requests = state.users.count { it.user.devRequested } + state.apps.count { it.review == "pending" } +
+                state.pendingReleases.size
             ScrollableTabRow(selectedTabIndex = state.tab.ordinal, edgePadding = 8.dp) {
                 AdminTab.entries.forEach { tab ->
                     Tab(state.tab == tab, onClick = { admin.selectTab(tab) }, text = {
@@ -106,6 +107,14 @@ private fun LazyListScope.requests(state: AdminState, admin: AdminViewModel, vm:
     item { SectionTitle("Entwickler-Anfragen (${devRequests.size})") }
     if (devRequests.isEmpty()) item { Hint("Keine offenen Anfragen.") }
     items(devRequests, key = { "u${it.user.id}" }) { u -> DevRequestCard(u, admin) }
+    item { SectionTitle("Neue Versionen in Prüfung (${state.pendingReleases.size})") }
+    if (state.pendingReleases.isEmpty()) {
+        item {
+            Hint(if (state.overview?.reviewReleases == true) "Nichts zu prüfen."
+            else "Versionsprüfung ist aus (REVIEW_RELEASES=1 in der .env schaltet sie ein).")
+        }
+    }
+    items(state.pendingReleases, key = { "r${it.app}/${it.channel}/${it.version}" }) { r -> PendingReleaseCard(r, admin) }
     item { SectionTitle("Apps in Prüfung (${pendingApps.size})") }
     if (pendingApps.isEmpty()) item { Hint("Nichts zu prüfen.") }
     items(pendingApps, key = { "a${it.fullName}" }) { app ->
@@ -135,9 +144,39 @@ private fun OverviewCard(o: AdminOverview) {
             if (o.legalMissing.isNotEmpty()) Hint("⚠ Impressum unvollständig: ${o.legalMissing.joinToString()}",
                 MaterialTheme.colorScheme.error)
             if (!o.paymentsEnabled) Hint("Bezahlung nicht eingerichtet – Kauf-Apps nur per Code (STRIPE_* in der .env).")
+            if (o.scannerEnabled) Hint("✓ Virenscan aktiv (ClamAV)")
             if (o.withdrawalsOpen > 0) Hint("${o.withdrawalsOpen} Widerruf(e) offen – siehe Tab „Käufe“.",
                 MaterialTheme.colorScheme.error)
         }
+    }
+}
+
+@Composable
+private fun PendingReleaseCard(r: com.bytestreamdevelopment.bytedroide.data.PendingRelease, admin: AdminViewModel) {
+    var reject by remember { mutableStateOf(false) }
+    Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("${r.name} ${version(r.version)}" + if (r.channel == "beta") " (Beta)" else "",
+                style = MaterialTheme.typography.titleMedium)
+            Hint(r.app + (r.developer?.let { " · von $it" } ?: ""))
+            if (r.notes.isNotBlank()) Text(r.notes.take(400), style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { admin.decideRelease(r, true) }) { Text("Freigeben") }
+                OutlinedButton(onClick = { reject = true }) { Text("Ablehnen") }
+            }
+        }
+    }
+    if (reject) {
+        InputDialog(
+            title = "Version ablehnen",
+            text = "Der Entwickler bekommt die Begründung per E-Mail. Nutzer behalten die bisherige Version.",
+            label = "Begründung",
+            singleLine = false,
+            allowEmpty = true,
+            confirm = "Ablehnen",
+            onConfirm = { admin.decideRelease(r, false, it) },
+            onDismiss = { reject = false },
+        )
     }
 }
 
