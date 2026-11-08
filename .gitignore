@@ -18,3 +18,4 @@ server/data/
 *.db-wal
 *.db-shm
 __pycache__/
+.kotlin/
