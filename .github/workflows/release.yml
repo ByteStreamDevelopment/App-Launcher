@@ -1,21 +1,25 @@
 name: Release
 
-# Baut bei jedem veröffentlichten GitHub-Release (Tag z. B. v2.1.0) eine signierte APK,
-# hängt sie an das Release und veröffentlicht sie im ByteDroide-Store.
-# Pre-Releases (z. B. v2.2.0-beta1) landen im Beta-Kanal.
+# Startet bei jedem Tag v* (z. B. v2.1.0) – egal ob per "git push origin v2.1.0" oder über
+# "Draft a new release" auf GitHub. Legt das Release an, falls es noch keins gibt (mit automatischen
+# Release-Notizen), baut eine signierte APK, hängt sie an und veröffentlicht sie im ByteDroide-Store.
+# Tags mit Bindestrich (z. B. v2.2.0-beta1) werden Pre-Releases und landen im Beta-Kanal.
 #
 # Benötigte Secrets (Repo → Settings → Secrets and variables → Actions):
 #   KEYSTORE_BASE64     base64 der release.jks          (base64 -w0 release.jks)
 #   KEYSTORE_PASSWORD   Passwort des Keystores
 #   KEY_ALIAS           Alias des Schlüssels (z. B. store)
-#   KEY_PASSWORD        Passwort des Schlüssels
+#   KEY_PASSWORD        Passwort des Schlüssels (optional – leer = KEYSTORE_PASSWORD)
 #   BYTEDROIDE_API_KEY  API-Schlüssel aus dem Entwickler-Portal (optional – ohne wird nicht hochgeladen)
 # Variable (… → Variables):
 #   BYTEDROIDE_APP      App im Store, z. B. ProfImpossible/bytedroide
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: release-${{ github.ref_name }}
 
 permissions:
   contents: write
@@ -33,10 +37,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: Release anlegen (falls nötig)
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            PRE=""; [[ "$TAG" == *-* ]] && PRE="--prerelease"
+            gh release create "$TAG" --title "ByteDroide ${TAG#v}" --generate-notes --verify-tag $PRE
+          fi
+          gh release view "$TAG" --json body -q .body > release-notes.txt
+          echo "prerelease=$(gh release view "$TAG" --json isPrerelease -q .isPrerelease)" >> "$GITHUB_OUTPUT"
+
       - name: Version aus dem Tag
         id: version
         env:
-          TAG: ${{ github.event.release.tag_name }}
+          TAG: ${{ github.ref_name }}
         run: |
           scripts/version-from-tag.sh "$TAG" | tee -a "$GITHUB_OUTPUT"
 
@@ -56,7 +73,7 @@ jobs:
             echo "storeFile=release.jks"
             echo "storePassword=$KEYSTORE_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
-            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyPassword=${KEY_PASSWORD:-$KEYSTORE_PASSWORD}"
           } > keystore.properties
 
       - name: Tests & APK bauen
@@ -75,20 +92,19 @@ jobs:
       - name: An das GitHub-Release hängen
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.apk.outputs.file }}" --clobber
+        run: gh release upload "${{ github.ref_name }}" "${{ steps.apk.outputs.file }}" --clobber
 
       - name: Im ByteDroide-Store veröffentlichen
         env:
           API_KEY: ${{ secrets.BYTEDROIDE_API_KEY }}
           APP: ${{ vars.BYTEDROIDE_APP }}
-          NOTES: ${{ github.event.release.body }}
-          CHANNEL: ${{ github.event.release.prerelease && 'beta' || 'stable' }}
+          CHANNEL: ${{ steps.release.outputs.prerelease == 'true' && 'beta' || 'stable' }}
         run: |
           if [ -z "$API_KEY" ] || [ -z "$APP" ]; then
             echo "BYTEDROIDE_API_KEY oder BYTEDROIDE_APP nicht gesetzt – Upload in den Store übersprungen."
             exit 0
           fi
-          ENC_NOTES=$(printf '%s' "$NOTES" | head -c 3500 | jq -sRr @uri)
+          ENC_NOTES=$(head -c 3500 release-notes.txt | jq -sRr @uri)
           curl --fail-with-body -sS -X POST \
             -H "Authorization: Bearer $API_KEY" \
             -H "Content-Type: application/vnd.android.package-archive" \
