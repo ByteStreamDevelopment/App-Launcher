@@ -1,0 +1,275 @@
+{
+ "apps": {
+  "apps": [
+   {
+    "id": "Mrcoolgamer11/Geheim",
+    "owner": "Mrcoolgamer11",
+    "developer": null,
+    "name": "Geheim",
+    "description": "",
+    "category": "",
+    "homepage": "",
+    "html_url": "y",
+    "avatar_url": null,
+    "release": {
+     "tag": "v1.0",
+     "name": "v1.0",
+     "notes": "Neu in v1.0",
+     "published_at": "2026-11-07T09:05:45+01:00",
+     "html_url": "",
+     "channel": "stable"
+    },
+    "apks": [
+     {
+      "name": "geheim.apk",
+      "size": 11
+     }
+    ],
+    "access": "open",
+    "price_cents": 0,
+    "currency": "eur",
+    "price": "",
+    "can_buy": false,
+    "unlocked": true,
+    "beta": {
+     "mode": "off",
+     "available": false,
+     "joined": false,
+     "version": ""
+    },
+    "review": "approved",
+    "can_manage": false
+   },
+   {
+    "id": "Manhunt/manhunt",
+    "owner": "Manhunt",
+    "developer": null,
+    "name": "manhunt",
+    "description": "Spiel",
+    "category": "",
+    "homepage": "",
+    "html_url": "https://git.nebendahl.eu/Manhunt/manhunt",
+    "avatar_url": null,
+    "release": {
+     "tag": "v2.5.0",
+     "name": "v2.5.0",
+     "notes": "Neu in v2.5.0",
+     "published_at": "2026-11-07T09:05:45+01:00",
+     "html_url": "",
+     "channel": "stable"
+    },
+    "apks": [
+     {
+      "name": "manhunt-v2.5.0.apk",
+      "size": 11
+     }
+    ],
+    "access": "open",
+    "price_cents": 0,
+    "currency": "eur",
+    "price": "",
+    "can_buy": false,
+    "unlocked": true,
+    "beta": {
+     "mode": "off",
+     "available": false,
+     "joined": false,
+     "version": ""
+    },
+    "review": "approved",
+    "can_manage": false
+   },
+   {
+    "id": "anna/spiel",
+    "owner": "anna",
+    "developer": "anna",
+    "name": "Mein Spiel",
+    "description": "Toll",
+    "category": "Spiele",
+    "homepage": "",
+    "html_url": "",
+    "avatar_url": null,
+    "release": {
+     "tag": "1.1.0-beta",
+     "name": "1.1.0-beta",
+     "notes": "",
+     "published_at": "2026-11-08T19:16:56Z",
+     "html_url": "",
+     "channel": "beta"
+    },
+    "apks": [
+     {
+      "name": "spiel-1.1.0-beta.apk",
+      "size": 718
+     }
+    ],
+    "access": "open",
+    "price_cents": 199,
+    "currency": "eur",
+    "price": "1,99 €",
+    "can_buy": true,
+    "unlocked": true,
+    "beta": {
+     "mode": "open",
+     "available": true,
+     "joined": true,
+     "version": "1.1.0-beta"
+    },
+    "review": "approved",
+    "can_manage": false
+   }
+  ],
+  "user": {
+   "id": 3,
+   "username": "bert",
+   "email": "bert@example.org",
+   "email_verified": false,
+   "role": "user",
+   "is_admin": false,
+   "is_developer": false,
+   "dev_requested": false,
+   "notify_updates": true,
+   "notify_news": false
+  }
+ },
+ "devapp": {
+  "id": "anna/spiel",
+  "name": "Mein Spiel",
+  "description": "Toll",
+  "category": "Spiele",
+  "homepage": "",
+  "developer": "anna",
+  "source_type": "upload",
+  "source_url": "",
+  "has_source_token": false,
+  "package_name": "com.anna.spiel",
+  "access": "open",
+  "price_cents": 199,
+  "beta": "open",
+  "review": "approved",
+  "review_note": "",
+  "avatar_url": null,
+  "stable": "1.0.0",
+  "beta_version": "1.1.0-beta",
+  "source_error": null,
+  "downloads": 0,
+  "downloads_30d": 0,
+  "download_users": 0,
+  "sales": 1,
+  "revenue_cents": 199,
+  "currency": "eur",
+  "codes_open": 0,
+  "codes_used": 0,
+  "testers": 1,
+  "unlocked_users": 1,
+  "created_at": 1794165416
+ },
+ "me": {
+  "user": {
+   "id": 2,
+   "username": "anna",
+   "email": "anna@example.org",
+   "email_verified": true,
+   "role": "developer",
+   "is_admin": false,
+   "is_developer": true,
+   "dev_requested": false,
+   "notify_updates": true,
+   "notify_news": false
+  }
+ },
+ "purchases": {
+  "purchases": [
+   {
+    "id": 1,
+    "app": "anna/spiel",
+    "app_name": "Mein Spiel",
+    "amount_cents": 199,
+    "price": "1,99 €",
+    "status": "paid",
+    "created_at": 1794165416,
+    "withdrawn_at": null,
+    "can_withdraw": true
+   }
+  ]
+ },
+ "users": {
+  "users": [
+   {
+    "id": 1,
+    "username": "chef",
+    "email": "chef@example.org",
+    "email_verified": false,
+    "role": "admin",
+    "is_admin": true,
+    "is_developer": true,
+    "dev_requested": false,
+    "notify_updates": true,
+    "notify_news": false,
+    "created_at": 1794165416,
+    "dev_note": "",
+    "dev_requested_at": null,
+    "apps": 0,
+    "unlocked": []
+   },
+   {
+    "id": 2,
+    "username": "anna",
+    "email": "anna@example.org",
+    "email_verified": true,
+    "role": "developer",
+    "is_admin": false,
+    "is_developer": true,
+    "dev_requested": false,
+    "notify_updates": true,
+    "notify_news": false,
+    "created_at": 1794165416,
+    "dev_note": "",
+    "dev_requested_at": null,
+    "apps": 1,
+    "unlocked": []
+   },
+   {
+    "id": 3,
+    "username": "bert",
+    "email": "bert@example.org",
+    "email_verified": false,
+    "role": "user",
+    "is_admin": false,
+    "is_developer": false,
+    "dev_requested": false,
+    "notify_updates": true,
+    "notify_news": false,
+    "created_at": 1794165416,
+    "dev_note": "",
+    "dev_requested_at": null,
+    "apps": 0,
+    "unlocked": [
+     {
+      "id": "anna/spiel",
+      "name": "Mein Spiel",
+      "source": "purchase"
+     }
+    ]
+   }
+  ]
+ },
+ "overview": {
+  "users": 3,
+  "developers": 2,
+  "dev_requests": 0,
+  "apps": 3,
+  "apps_pending": 0,
+  "downloads_30d": 0,
+  "revenue_cents": 199,
+  "withdrawals_open": 0,
+  "mail_enabled": true,
+  "payments_enabled": true,
+  "legal_missing": [
+   "OPERATOR_NAME",
+   "OPERATOR_STREET",
+   "OPERATOR_CITY",
+   "OPERATOR_EMAIL"
+  ]
+ }
+}

@@ -1,11 +1,15 @@
 FROM python:3.13-slim
 
-RUN useradd --uid 1000 --create-home store && mkdir /data && chown store /data
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/* \
+    && useradd --uid 1000 --create-home store && mkdir /data && chown store /data
 WORKDIR /app
-COPY store_server.py .
+COPY *.py ./
+COPY web ./web
 
 ENV DB_PATH=/data/store.db \
+    DATA_DIR=/data/files \
     PORT=8080 \
+    TZ=Europe/Berlin \
     PYTHONUNBUFFERED=1
 VOLUME /data
 EXPOSE 8080
