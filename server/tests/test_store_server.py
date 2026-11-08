@@ -340,6 +340,20 @@ class AccountTest(ServerTestCase):
         self.assertEqual((me["role"], me["is_developer"], me["dev_requested"]), ("developer", True, False))
         self.assertEqual(self.call("GET", "/api/dev/apps", token=tok)[0], 200)
 
+    def test_ungelesener_body_stoert_keep_alive_nicht(self):
+        import http.client
+        tok = self.register("anna")["token"]
+        conn = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1])
+        # Endpunkte, die ihren Body nicht lesen (auch bei Fehlern), dürfen die Verbindung nicht vergiften
+        for method, path, auth in (("POST", "/api/me/verify", tok), ("POST", "/api/dev/apps/x/y/releases", None),
+                                   ("GET", "/healthz", None)):
+            conn.request(method, path, body=b"{}", headers={"Authorization": f"Bearer {auth}"} if auth else {})
+            conn.getresponse().read()
+            conn.request("GET", "/healthz")
+            r = conn.getresponse()
+            self.assertEqual((r.status, r.read()), (200, b'{"ok": true}'), path)
+        conn.close()
+
     def test_logout_und_bremse(self):
         token = self.register("anna")["token"]
         self.call("POST", "/api/logout", {}, token)
