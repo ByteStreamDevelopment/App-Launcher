@@ -204,8 +204,8 @@ Updates bekommen; der Code liegt im Namespace `com.bytestreamdevelopment.bytedro
 
 ### Automatisch bei jedem GitHub-Release bauen
 
-`.github/workflows/release.yml` baut bei jedem **veröffentlichten Release** (Tag wie `v2.1.0`) eine signierte APK,
-hängt sie an das Release und lädt sie in den Store hoch (Pre-Releases wie `v2.2.0-beta1` → Beta-Kanal).
+`.github/workflows/release.yml` baut bei jedem **Tag `v*`** (z. B. `git push origin v2.1.0` oder ein Release auf
+GitHub) eine signierte APK, legt bei Bedarf das Release an, hängt die APK daran und lädt sie in den Store hoch (Pre-Releases wie `v2.2.0-beta1` → Beta-Kanal).
 `versionName` kommt aus dem Tag, `versionCode` wird daraus berechnet (`2.1.3` → `2010300`, Vorabversionen etwas
 kleiner), steigt also automatisch.
 
@@ -216,7 +216,7 @@ Einmalig einrichten:
    API-Schlüssel erstellen → Secret `BYTEDROIDE_API_KEY`, Variable `BYTEDROIDE_APP` = `DEINNAME/bytedroide`.
 3. In `server/.env` `STORE_APP_ID=DEINNAME/bytedroide` setzen → die APK gibt es dann auch unter `/download`.
 
-Danach genügt: GitHub → Releases → „Draft a new release“ → Tag `v2.1.0` → Publish.
+Danach genügt `git tag v2.1.0 && git push origin v2.1.0` – oder GitHub → Releases → „Draft a new release“ → Tag `v2.1.0` → Publish.
 
 **Mit Forgejo statt GitHub:** `.forgejo/workflows/release.yml` macht dasselbe auf einem Forgejo-Runner (für einen
 Spiegel des Repos auf Forgejo; `runs-on` ggf. an das Label deines Runners anpassen). Die APK wird an das
