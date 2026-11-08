@@ -256,6 +256,8 @@ async function appView(id) {
       h("div", { style: "margin-top:10px" }, reviewChip(app.review)),
       app.review_note ? h("p", { class: "muted" }, "Hinweis der Prüfung: " + app.review_note) : null,
       app.source_error ? h("p", { style: "color:var(--err)" }, "Quelle: " + app.source_error) : null,
+      app.pending_versions.length ? h("p", { style: "color:var(--warn)" }, "Wartet auf Admin-Prüfung: " + app.pending_versions.join(", ")) : null,
+      app.blocked_versions.length ? h("p", { style: "color:var(--err)" }, "Gesperrt (abgelehnt/Virenfund): " + app.blocked_versions.join(", ")) : null,
       h("div", { class: "stats" },
         h("div", {}, h("b", {}, app.downloads), "Downloads"), h("div", {}, h("b", {}, app.downloads_30d), "letzte 30 Tage"),
         h("div", {}, h("b", {}, app.sales), "Verkäufe"), h("div", {}, h("b", {}, money(app.revenue_cents)), "Umsatz"),
@@ -266,11 +268,13 @@ async function appView(id) {
     const file = h("input", { type: "file", accept: ".apk,application/vnd.android.package-archive" });
     const version = h("input", { placeholder: "wird aus der APK gelesen" });
     const channel = h("select", {}, h("option", { value: "stable" }, "Stabil"), h("option", { value: "beta" }, "Beta"));
+    const rollout = h("select", {}, [100, 50, 25, 10].map(v => h("option", { value: v }, v === 100 ? "100 % (alle)" : v + " %")));
     const notes = h("textarea", { placeholder: "Was ist neu?" });
     const bar = h("progress", { max: "100", value: "0", style: "display:none" });
     const btn = h("button", { onclick: () => {
       if (!file.files[0]) return toast("Bitte eine APK auswählen");
-      const q = new URLSearchParams({ channel: channel.value, version: version.value, notes: notes.value });
+      const q = new URLSearchParams({ channel: channel.value, version: version.value, notes: notes.value,
+        rollout: channel.value === "stable" ? rollout.value : 100 });
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${BASE}/api/dev/apps/${enc(id)}/releases?${q}`);
       xhr.setRequestHeader("Authorization", "Bearer " + token);
@@ -284,17 +288,36 @@ async function appView(id) {
     } }, "Hochladen");
     nodes.push(h("div", { class: "card" }, h("h2", {}, "Neue Version hochladen"),
       h("label", {}, "APK-Datei"), file,
-      h("div", { class: "row" }, h("div", {}, h("label", {}, "Version (optional)"), version), h("div", {}, h("label", {}, "Kanal"), channel)),
+      h("div", { class: "row" }, h("div", {}, h("label", {}, "Version (optional)"), version), h("div", {}, h("label", {}, "Kanal"), channel),
+        h("div", {}, h("label", {}, "Rollout (nur Stabil)"), rollout)),
       h("label", {}, "Neuigkeiten"), notes, h("div", { style: "margin:12px 0" }, bar), btn,
       h("p", { class: "muted" }, "Paketname, versionName und versionCode werden geprüft. Der versionCode muss bei jedem Upload steigen."),
       rel.releases.length ? h("table", {}, h("tr", {}, h("th", {}, "Version"), h("th", {}, "Kanal"), h("th", {}, "Größe"), h("th", {}, "Datum"), h("th", {})),
-        rel.releases.map(r => h("tr", {}, h("td", {}, r.version, h("div", { class: "muted" }, "Code " + (r.version_code ?? "?"))),
-          h("td", {}, r.channel === "beta" ? "Beta" : "Stabil"), h("td", {}, size(r.size)), h("td", {}, date(r.created_at)),
+        rel.releases.map(r => h("tr", {}, h("td", {}, r.version, h("div", { class: "muted" }, "Code " + (r.version_code ?? "?")),
+            r.status === "pending" ? h("span", { class: "chip warn" }, "Wartet auf Prüfung") : null,
+            r.status === "rejected" ? h("span", { class: "chip err", title: r.review_note || "" }, "Abgelehnt") : null,
+            r.scan === "clean" ? h("span", { class: "chip ok" }, "Virenscan ✓") : null),
+          h("td", {}, r.channel === "beta" ? "Beta" : "Stabil",
+            r.channel === "stable" && r.status === "approved" ? h("div", {}, h("a", { href: "#", onclick: ev => { ev.preventDefault();
+              const v = prompt(`Rollout für ${r.version} in Prozent (1–100):`, r.rollout); if (v) run(async () => {
+                await api("PUT", `/api/dev/apps/${enc(id)}/releases/${r.id}`, { rollout: +v }); toast("Rollout: " + v + " %"); appView(id); }); } },
+              "Rollout " + r.rollout + " %")) : null), h("td", {}, size(r.size)), h("td", {}, date(r.created_at)),
           h("td", {}, h("button", { class: "sec", onclick: () => confirm(`Version ${r.version} löschen?`) && run(async () => {
             await api("DELETE", `/api/dev/apps/${enc(id)}/releases/${r.id}`); appView(id); }) }, "Löschen"))))) : null,
       h("h3", {}, "Automatisch aus CI hochladen"),
       h("pre", {}, `curl --fail -X POST -H "Authorization: Bearer <API-SCHLÜSSEL>" \\\n  --data-binary @app/build/outputs/apk/release/app-release.apk \\\n  "${BASE}/api/dev/apps/${id}/releases?channel=stable"`)));
   }
+
+  const shotInput = h("input", { type: "file", accept: "image/png,image/jpeg,image/webp", multiple: true, style: "display:none",
+    onchange: () => run(async () => { for (const f of shotInput.files) await api("POST", `/api/dev/apps/${enc(id)}/screenshots`, f, true);
+      toast("Screenshots hochgeladen"); appView(id); }) });
+  nodes.push(h("div", { class: "card" }, h("h2", {}, `Screenshots (${app.screenshots.length}/8)`),
+    h("div", { style: "display:flex;gap:10px;overflow-x:auto;padding-bottom:6px" }, app.screenshots.map(sh => h("div", { style: "position:relative;flex:none" },
+      h("img", { src: sh.url, style: "height:180px;border-radius:10px;border:1px solid var(--border)" }),
+      h("button", { class: "danger", style: "position:absolute;top:6px;right:6px;padding:4px 10px", onclick: () => run(async () => {
+        await api("DELETE", `/api/dev/apps/${enc(id)}/screenshots/${sh.id}`); appView(id); }) }, "✕")))),
+    app.screenshots.length < 8 ? h("button", { class: "sec", style: "margin-top:10px", onclick: () => shotInput.click() }, "Screenshots hinzufügen") : null,
+    shotInput, h("p", { class: "muted" }, "PNG, JPEG oder WebP bis 3 MB. Erscheinen in der App und im Web-Store.")));
 
   nodes.push(h("div", { class: "card" }, h("h2", {}, "Einstellungen"),
     h("div", { class: "row" }, h("div", {}, h("label", {}, "Name"), f.name), h("div", {}, h("label", {}, "Kategorie"), f.category)),
@@ -352,8 +375,8 @@ function keysCard(keys) {
 
 // --- Admin -------------------------------------------------------------------
 async function adminCard() {
-  const [{ users }, { apps }, ov] = await Promise.all([api("GET", "/api/admin/users"), api("GET", "/api/admin/apps"),
-    api("GET", "/api/admin/overview")]);
+  const [{ users }, { apps }, ov, { releases }] = await Promise.all([api("GET", "/api/admin/users"), api("GET", "/api/admin/apps"),
+    api("GET", "/api/admin/overview"), api("GET", "/api/admin/releases")]);
   const reqs = users.filter(u => u.dev_requested), pending = apps.filter(a => a.review === "pending");
   const warn = [];
   if (!ov.mail_enabled) warn.push("E-Mail-Versand ist nicht eingerichtet (SMTP_* in der .env).");
@@ -377,6 +400,13 @@ async function adminCard() {
         h("button", { class: "sec", onclick: () => { const n = prompt("Begründung"); if (n !== null) run(async () => {
           await api("PUT", "/api/admin/apps/" + enc(a.id), { review: "rejected", review_note: n }); home(); }); } }, "Ablehnen"))))) :
       h("p", { class: "muted" }, "Nichts zu prüfen."),
+    h("h3", {}, `Neue Versionen in Prüfung (${releases.length})`),
+    releases.length ? h("table", {}, releases.map(r => h("tr", {}, h("td", {}, h("b", {}, r.name + " " + r.version), h("div", { class: "muted" }, r.app + (r.channel === "beta" ? " · Beta" : ""))),
+      h("td", { class: "muted" }, (r.notes || "").slice(0, 120)),
+      h("td", {}, h("button", { onclick: () => run(async () => { await api("POST", "/api/admin/releases/decide", { app: r.app, channel: r.channel, release_id: r.release_id, approve: true }); toast("Freigegeben"); home(); }) }, "Freigeben"), " ",
+        h("button", { class: "sec", onclick: () => { const n = prompt("Begründung"); if (n !== null) run(async () => {
+          await api("POST", "/api/admin/releases/decide", { app: r.app, channel: r.channel, release_id: r.release_id, approve: false, note: n }); home(); }); } }, "Ablehnen"))))) :
+      h("p", { class: "muted" }, ov.review_releases ? "Nichts zu prüfen." : "Versionsprüfung ist aus (REVIEW_RELEASES=1 schaltet sie ein)."),
     h("p", { class: "muted" }, "Rollen, Käufe und Rundmails verwaltest du in der App im Admin-Bereich."));
 }
 

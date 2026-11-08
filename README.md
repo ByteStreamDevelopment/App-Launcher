@@ -45,6 +45,26 @@ zurückgestuft noch gelöscht werden.
 **App-Prüfung**: Neue Apps von Entwicklern sind erst sichtbar, wenn ein Admin sie freigibt
 (Entwickler bekommt eine E-Mail, bei Ablehnung mit Begründung).
 
+## Web-Store, Bewertungen & mehr
+
+- **Web-Store im Browser** unter `https://apps.nebendahl.eu/`: Katalog mit Suche und Kategorien, App-Seiten mit
+  Screenshots, Bewertungen, Versionshinweisen und **QR-Code** (`/app/{id}`, als Datei unter `/app/{id}/qr.svg`).
+  Freie, offene Apps lassen sich dort auch direkt als APK laden.
+  Mit `ANDROID_CERT_SHA256` liefert der Server `/.well-known/assetlinks.json` aus – dann öffnet ein gescannter
+  QR-Code direkt ByteDroide (Android App Links).
+- **Bewertungen**: 1–5 Sterne mit Text, nur wer die App über ByteDroide geladen hat; Entwickler können antworten,
+  Admins moderieren. Durchschnitt erscheint in der App-Liste und im Web-Store.
+- **Screenshots**: bis zu 8 pro App (App, Portal oder `POST /api/dev/apps/{id}/screenshots`).
+- **Push über ntfy** (ohne Google): Konto → „Push über ntfy“ erzeugt ein geheimes Thema, das man in der ntfy-App
+  abonniert. Alle Benachrichtigungen (Updates, Freigaben, Antworten …) kommen dann zusätzlich als Push.
+- **Gestaffelte Rollouts**: Beim Upload (stabiler Kanal) z. B. erst 10 % der Nutzer; später auf 100 % erhöhen.
+  Die Zuordnung ist stabil je Konto bzw. Gerät. Update-Benachrichtigungen gehen erst bei 100 % raus.
+- **Virenscan** mit ClamAV: Uploads werden vor dem Speichern geprüft, neue Versionen aus Quellen vor der
+  Auslieferung. Funde werden gesperrt und den Admins gemeldet. Starten:
+  `docker compose --profile clamav up -d` und `CLAMAV_HOST=clamav` in der `.env`.
+- **Prüfung neuer Versionen** (`REVIEW_RELEASES=1`): Neue Versionen von Entwicklern werden erst nach Freigabe im
+  Admin-Bereich (Anfragen) ausgeliefert – bis dahin bekommen Nutzer die bisherige.
+
 ## E-Mails
 
 Alle Mails sind als schönes HTML (mit Text-Alternative) gestaltet und enthalten Impressum-/Datenschutz-Links:
@@ -116,6 +136,10 @@ Eine bestehende Datenbank aus Version 1.x wird beim Start automatisch übernomme
 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `CURRENCY` | Bezahlung (Webhook: `https://…/api/stripe/webhook`) |
 | `MAX_UPLOAD_MB` | maximale APK-Größe (Standard 200) |
 | `STORE_APP_ID` | App, die unter `/download` angeboten wird (z. B. ByteDroide selbst) |
+| `NTFY_URL`, `NTFY_TOKEN` | Push über ntfy (Standard `https://ntfy.sh`, leer = aus) |
+| `CLAMAV_HOST`, `CLAMAV_PORT`, `CLAMAV_REQUIRED` | Virenscan mit ClamAV |
+| `REVIEW_RELEASES` | `1` = neue Versionen von Entwicklern erst nach Admin-Freigabe |
+| `ANDROID_CERT_SHA256` | Zertifikats-Fingerabdruck für App Links (QR-Codes öffnen die App) |
 | `TRUST_PROXY` | `1` hinter Reverse-Proxy (in `docker-compose.yml` bereits gesetzt) |
 
 Ohne Docker: `cd server && python3 store_server.py`

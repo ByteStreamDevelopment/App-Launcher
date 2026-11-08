@@ -21,10 +21,14 @@
   (14 Tage, Eingangsbestätigung per Mail), Erstattung durch Admin.
 - **Mails**: SMTP über `SMTP_*`; ohne `SMTP_HOST` nur Log. **Rechtstexte**: `/impressum`, `/datenschutz`, `/agb`,
   `/widerruf`, Betreiberdaten aus `OPERATOR_*` (fehlende werden rot markiert). Nutzer muss echte Daten in `.env` eintragen.
-- **Server testen**: `python3 -m unittest discover -s server/tests` (41 Tests, Fake-Forgejo/GitHub/Mailer/Stripe, ~20 s).
+- **Server testen**: `python3 -m unittest discover -s server/tests` (54 Tests, Fake-Forgejo/GitHub/Mailer/Stripe/ntfy/ClamAV, ~30 s).
   CLI im Container: `python store_server.py users | set-role NAME ROLLE | reset-password NAME`.
 - **App testen**: `./gradlew assembleDebug testDebugUnitTest` (Versionsvergleich + `ApiContractTest` mit echten
   Server-Antworten aus `app/src/test/resources/api-samples.json`; bei API-Änderungen neu erzeugen).
+- **Weitere Funktionen (Issue #2)**: Web-Store (`storefront.py`, QR per `qrcode_svg.py`, App Links über
+  `/.well-known/assetlinks.json`), Bewertungen (`reviews`), Screenshots, Push über ntfy (`notify.py`, `users.ntfy_topic`),
+  gestaffelte Rollouts (`releases.rollout`, Zuordnung per Konto/`X-Install-Id`), ClamAV (`scanner.py`),
+  Versions-Prüfung (`REVIEW_RELEASES`, `releases.status`, bei Quellen `apps.pending_*`/`held_*`).
 - **Releases**: `.github/workflows/release.yml` bzw. `.forgejo/workflows/release.yml` bauen bei veröffentlichtem
   Release eine signierte APK (Keystore aus Secrets), Version per `scripts/version-from-tag.sh`, Upload in den Store.
 - **GitHub-Repo**: `bytestreamdevelopment/app-launcher`.

@@ -34,6 +34,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import apk_info
 import legal
 import mailer as mail
+import notify
+import qrcode_svg
+import scanner
+import storefront
 
 log = logging.getLogger("store")
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -96,6 +100,18 @@ class Config:
         self.stripe_secret_key = g("STRIPE_SECRET_KEY")
         self.stripe_webhook_secret = g("STRIPE_WEBHOOK_SECRET")
         self.currency = g("CURRENCY", "eur").lower()
+        # Push über ntfy (leer = aus)
+        self.ntfy_url = g("NTFY_URL", "https://ntfy.sh").rstrip("/")
+        self.ntfy_token = g("NTFY_TOKEN")
+        # Virenscan (ClamAV-Daemon)
+        self.clamav_host = g("CLAMAV_HOST")
+        self.clamav_port = int(g("CLAMAV_PORT", "3310"))
+        self.clamav_required = _flag(env, "CLAMAV_REQUIRED")
+        # Neue Versionen von Entwicklern erst nach Admin-Prüfung veröffentlichen
+        self.review_releases = _flag(env, "REVIEW_RELEASES")
+        # Android App Links (QR-Codes öffnen direkt ByteDroide): SHA-256 des Signaturzertifikats
+        self.android_cert_sha256 = g("ANDROID_CERT_SHA256")
+        self.android_package = g("ANDROID_PACKAGE", "com.bytestreamdevelopment.applauncher")
         if self.default_access not in ACCESS_MODES:
             raise ValueError(f"DEFAULT_ACCESS muss eins von {ACCESS_MODES} sein")
 
@@ -106,6 +122,14 @@ class Config:
 
 def now() -> int:
     return int(time.time())
+
+
+def _col(row, name, default=None):
+    """Spalte aus einer sqlite3.Row – oder default, wenn es sie (bei alten Abfragen) nicht gibt."""
+    try:
+        return row[name]
+    except (IndexError, KeyError):
+        return default
 
 
 def hash_password(password: str) -> str:
@@ -144,6 +168,16 @@ def normalize_version(tag: str) -> str:
 def format_price(cents: int, currency: str = "eur") -> str:
     symbol = {"eur": "€", "usd": "$", "chf": "CHF", "gbp": "£"}.get(currency, currency.upper())
     return f"{cents // 100},{cents % 100:02d} {symbol}"
+
+
+def _image_ext(data: bytes):
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if data.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
 
 
 def format_ts(ts) -> str:
@@ -303,6 +337,32 @@ CREATE TABLE IF NOT EXISTS downloads (
     ts          INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS downloads_app ON downloads(app);
+CREATE TABLE IF NOT EXISTS reviews (
+    app         TEXT NOT NULL,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating      INTEGER NOT NULL,
+    text        TEXT NOT NULL DEFAULT '',
+    version     TEXT NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    reply       TEXT NOT NULL DEFAULT '',
+    reply_at    INTEGER,
+    PRIMARY KEY (app, user_id)
+);
+CREATE TABLE IF NOT EXISTS scans (
+    app         TEXT NOT NULL,
+    tag         TEXT NOT NULL,
+    result      TEXT NOT NULL,
+    ts          INTEGER NOT NULL,
+    PRIMARY KEY (app, tag)
+);
+CREATE TABLE IF NOT EXISTS screenshots (
+    id          INTEGER PRIMARY KEY,
+    app         TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    position    INTEGER NOT NULL DEFAULT 0,
+    created_at  INTEGER NOT NULL
+);
 """
 
 # Spalten, die ältere Datenbanken nachträglich bekommen (Migration ohne Datenverlust).
@@ -315,6 +375,23 @@ USER_COLUMNS = {
     "notify_updates": "INTEGER NOT NULL DEFAULT 1",
     "notify_news": "INTEGER NOT NULL DEFAULT 0",
     "terms_accepted_at": "INTEGER",
+    "ntfy_topic": "TEXT NOT NULL DEFAULT ''",
+}
+APP_COLUMNS = {
+    # zuletzt freigegebene Version je Kanal als JSON (wird ausgeliefert, solange eine neuere geprüft wird)
+    "held_stable": "TEXT",
+    "held_beta": "TEXT",
+    # Version, die gerade auf Admin-Prüfung wartet (nur bei Quell-Apps)
+    "pending_stable": "TEXT",
+    "pending_beta": "TEXT",
+    # gesperrte Versionen (abgelehnt oder Schadsoftware), JSON-Liste
+    "blocked_tags": "TEXT NOT NULL DEFAULT '[]'",
+}
+RELEASE_COLUMNS = {
+    "status": "TEXT NOT NULL DEFAULT 'approved'",   # approved | pending | rejected
+    "rollout": "INTEGER NOT NULL DEFAULT 100",      # Prozent der Nutzer, die diese Version bekommen
+    "scan": "TEXT NOT NULL DEFAULT ''",             # clean | unscanned | Fundname
+    "review_note": "TEXT NOT NULL DEFAULT ''",
 }
 SESSION_COLUMNS = {"label": "TEXT"}
 UNLOCK_COLUMNS = {"source": "TEXT NOT NULL DEFAULT 'code'"}
@@ -342,6 +419,8 @@ class Database:
             conn.execute("UPDATE users SET role = 'admin' WHERE is_admin = 1")
         self._add_columns(conn, "sessions", SESSION_COLUMNS)
         self._add_columns(conn, "unlocks", UNLOCK_COLUMNS)
+        self._add_columns(conn, "apps", APP_COLUMNS)
+        self._add_columns(conn, "releases", RELEASE_COLUMNS)
         conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS users_email ON users(email COLLATE NOCASE) "
                      "WHERE email IS NOT NULL")
 
@@ -541,18 +620,24 @@ class RateLimiter:
 # ---------------------------------------------------------------------------
 
 class Store:
-    def __init__(self, config: Config, db: Database, sources: Sources, mailer=None, stripe=None):
+    def __init__(self, config: Config, db: Database, sources: Sources, mailer=None, stripe=None, pusher=None,
+                 virus_scanner=None):
         self.config = config
         self.db = db
         self.sources = sources
         self.mailer = mailer or mail.Mailer(config)
         self.stripe = stripe or self._stripe_request
+        self.pusher = pusher or notify.Pusher(config.ntfy_url, config.ntfy_token)
+        self.scanner = virus_scanner or scanner.Scanner(config.clamav_host, config.clamav_port)
+        self._scanning: set = set()     # (app, tag) – Virenscan läuft
+        self._scan_lock = threading.Lock()
         self.limiter = RateLimiter()
         self.signup_limiter = RateLimiter(max_failures=20, window=3600)
         self._refresh_lock = threading.RLock()
         self._last_cleanup = 0.0
         os.makedirs(os.path.join(config.data_dir, "apks"), exist_ok=True)
         os.makedirs(os.path.join(config.data_dir, "icons"), exist_ok=True)
+        os.makedirs(os.path.join(config.data_dir, "screenshots"), exist_ok=True)
 
     # --- E-Mails ---------------------------------------------------------------
 
@@ -563,8 +648,15 @@ class Store:
         self.mailer.send(to, subject, html_body, text)
 
     def _mail_user(self, user, subject, require_verified=True, **kw):
-        if user and user["email"] and (user["email_verified"] or not require_verified):
+        """E-Mail (an bestätigte Adressen) und – falls eingerichtet – Push über ntfy."""
+        if not user:
+            return
+        if user["email"] and (user["email_verified"] or not require_verified):
             self._mail(user["email"], subject, **kw)
+        topic = _col(user, "ntfy_topic")
+        if topic:
+            button = kw.get("button")
+            self.pusher.send(topic, subject, kw.get("intro", ""), click=button[1] if button else "")
 
     def _mail_admins(self, subject, **kw):
         with self.db.connect() as conn:
@@ -598,6 +690,7 @@ class Store:
             "dev_requested": row["dev_requested_at"] is not None,
             "notify_updates": bool(row["notify_updates"]),
             "notify_news": bool(row["notify_news"]),
+            "ntfy_topic": _col(row, "ntfy_topic") or "",
         }
 
     def _new_session(self, conn, user_id: int, label=None) -> str:
@@ -716,6 +809,24 @@ class Store:
 
     def _user(self, conn, user_id):
         return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+    def set_ntfy(self, user, enable: bool) -> dict:
+        topic = ("bytedroide-" + secrets.token_urlsafe(18).replace("_", "").replace("-", "")[:20]) if enable else ""
+        with self.db.connect() as conn:
+            conn.execute("UPDATE users SET ntfy_topic = ? WHERE id = ?", (topic, user["id"]))
+            row = self._user(conn, user["id"])
+        if topic:
+            self.pusher.send(topic, "ByteDroide verbunden 🎉", "Ab jetzt bekommst du hier Benachrichtigungen von "
+                             "ByteDroide.", click=self.config.public_url)
+        return {"user": self.user_json(row), "ntfy_url": self.pusher.topic_url(topic) if topic else ""}
+
+    def test_ntfy(self, user):
+        topic = _col(user, "ntfy_topic")
+        if not topic:
+            raise HttpError(400, "Push-Benachrichtigungen sind nicht eingerichtet")
+        self.pusher.send(topic, "Test von ByteDroide", "Push-Benachrichtigungen funktionieren ✓",
+                         click=self.config.public_url)
+        return {"ok": True}
 
     def update_me(self, user, b: dict) -> dict:
         with self.db.connect() as conn:
@@ -856,6 +967,8 @@ class Store:
                             "WHERE user_id = ?"),
                 "downloads": q("SELECT app, version, channel, ts FROM downloads WHERE user_id = ?"),
                 "eigene_apps": q("SELECT id, name, description, created_at FROM apps WHERE developer_id = ?"),
+                "bewertungen": q("SELECT app, rating, text, version, created_at, updated_at FROM reviews "
+                                 "WHERE user_id = ?"),
                 "api_schluessel": q("SELECT label, created_at, last_used FROM sessions "
                                     "WHERE user_id = ? AND label IS NOT NULL"),
             }
@@ -890,12 +1003,13 @@ class Store:
     # --- Katalog ---------------------------------------------------------------
 
     def _app_rows(self, conn):
-        return conn.execute("SELECT a.*, u.username AS developer FROM apps a "
+        return conn.execute("SELECT a.*, u.username AS developer, u.role AS developer_role FROM apps a "
                             "LEFT JOIN users u ON u.id = a.developer_id").fetchall()
 
     def _app_row(self, conn, app_id, retry=True):
-        row = conn.execute("SELECT a.*, u.username AS developer FROM apps a LEFT JOIN users u ON u.id = a.developer_id "
-                           "WHERE a.key = ?", ((app_id or "").lower(),)).fetchone()
+        row = conn.execute("SELECT a.*, u.username AS developer, u.role AS developer_role FROM apps a "
+                           "LEFT JOIN users u ON u.id = a.developer_id WHERE a.key = ?",
+                           ((app_id or "").lower(),)).fetchone()
         if not row and retry and self.config.forgejo_auto_import:
             self.refresh_catalog()  # evtl. noch nicht importiertes Forgejo-Repo
             return self._app_row(conn, app_id, retry=False)
@@ -953,13 +1067,12 @@ class Store:
             with self.db.connect() as conn:
                 conn.execute(
                     "INSERT OR IGNORE INTO apps (key, id, name, description, source_type, source_url, source_repo, "
-                    "access, review, notified_tag, notified_beta, created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, 'forgejo_auto', ?, ?, ?, 'approved', ?, ?, ?, ?)",
+                    "access, review, created_at, updated_at) VALUES (?, ?, ?, ?, 'forgejo_auto', ?, ?, ?, 'approved', ?, ?)",
                     (key, full, repo.get("name") or full.split("/")[1], repo.get("description") or "",
-                     self.config.forgejo_url, full, legacy.get(key, self.config.default_access),
-                     (rel["stable"] or {}).get("tag"), (rel["beta"] or {}).get("tag"), now(), now()))
+                     self.config.forgejo_url, full, legacy.get(key, self.config.default_access), now(), now()))
                 row = self._app_row(conn, key, retry=False)
             self.sources._cache[key] = {**rel, "error": None, "at": time.time(), "sig": self.sources.sig(row)}
+            self._check_new_release(row, rel)  # erste Version: (scannen und) ohne Benachrichtigung freigeben
 
     def _cleanup(self):
         self._last_cleanup = time.time()
@@ -969,28 +1082,73 @@ class Store:
             conn.execute("DELETE FROM sessions WHERE label IS NULL AND last_used < ?",
                          (now() - SESSION_IDLE_DAYS * 86400,))
 
-    def _upload_releases(self, conn, key) -> dict:
+    @staticmethod
+    def _bucket(key: str, viewer: str) -> int:
+        """Stabile Zuordnung 0..99 je App und Nutzer/Gerät (für gestaffelte Rollouts)."""
+        return int(hashlib.sha256(f"{key}|{viewer}".encode()).hexdigest()[:8], 16) % 100
+
+    def _upload_releases(self, conn, key, viewer=None, include_pending=False) -> dict:
+        """Neueste freigegebene Upload-Version je Kanal. viewer=None: ohne Rollout-Begrenzung."""
         rows = conn.execute("SELECT * FROM releases WHERE app_key = ? ORDER BY created_at DESC, id DESC",
                             (key,)).fetchall()
         stable = beta = None
         for r in rows:
+            if r["status"] == "rejected" or (r["status"] == "pending" and not include_pending):
+                continue
+            if r["scan"] not in ("", "clean", "unscanned"):
+                continue  # Schadsoftware
             item = {"tag": r["version"], "name": r["version"], "notes": r["notes"],
                     "published_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(r["created_at"])),
-                    "html_url": "", "release_id": r["id"],
+                    "html_url": "", "release_id": r["id"], "rollout": r["rollout"],
                     "apks": [{"name": r["file_name"], "size": r["size"], "path": r["path"]}]}
             if r["channel"] == "beta":
                 if beta is None and stable is None:
                     beta = item
             elif stable is None:
+                if viewer is not None and r["rollout"] < 100 and self._bucket(key, viewer) >= r["rollout"]:
+                    continue  # noch nicht für diesen Nutzer freigeschaltet -> ältere Version
                 stable = item
                 break
         return {"stable": stable, "beta": beta}
 
-    def _releases(self, conn, row) -> dict:
+    # Schnappschüsse freigegebener Quell-Versionen (ohne Zugangsdaten, die kommen beim Download dazu)
+    @staticmethod
+    def _snapshot(rel) -> str:
+        data = {k: rel[k] for k in ("tag", "name", "notes", "published_at", "html_url")}
+        data["apks"] = [{"name": a["name"], "size": a["size"], "url": a["fetch"][0],
+                         "accept": a["fetch"][1].get("Accept", "*/*")} for a in rel["apks"]]
+        return json.dumps(data)
+
+    def _unsnapshot(self, row, text):
+        if not text:
+            return None
+        data = json.loads(text)
+        github = row["source_type"] == "github"
+        headers = self.sources.headers_for(row["source_url"], row["source_token"], github,
+                                           server_token=row["source_type"] == "forgejo_auto")
+        data["apks"] = [{"name": a["name"], "size": a["size"], "fetch": (a["url"], {**headers, "Accept": a["accept"]})}
+                        for a in data["apks"]]
+        return data
+
+    def _review_required(self, row) -> bool:
+        """Neue Versionen erst nach Admin-Prüfung? (nur Apps von Entwicklern, nicht von Admins)"""
+        return (self.config.review_releases and row["developer_id"] is not None
+                and _col(row, "developer_role") != "admin")
+
+    def _releases(self, conn, row, viewer=None) -> dict:
         if row["source_type"] == "upload":
-            return self._upload_releases(conn, row["key"])
+            return self._upload_releases(conn, row["key"], viewer)
         c = self.sources.cached(row)
-        return {"stable": c.get("stable"), "beta": c.get("beta")}
+        result = {}
+        for channel, approved_col, held_col in (("stable", "notified_tag", "held_stable"),
+                                                 ("beta", "notified_beta", "held_beta")):
+            rel = c.get(channel)
+            approved = row[approved_col]
+            if rel and (approved is None or rel["tag"] == approved):
+                result[channel] = rel if approved is not None else None
+            else:  # neuere Version wird noch geprüft/gescannt oder ist gesperrt -> zuletzt freigegebene
+                result[channel] = self._unsnapshot(row, row[held_col])
+        return result
 
     def _user_sets(self, conn, user):
         if not user:
@@ -1016,7 +1174,19 @@ class Store:
             return f"https://github.com/{row['source_repo']}"
         return self.sources.repo_urls.get(row["key"]) or f"{row['source_url']}/{row['source_repo']}"
 
-    def _view(self, row, rels, user, unlocks, betas):
+    def _extras(self, conn) -> dict:
+        """Bewertungen und Screenshots aller Apps (eine Abfrage je Katalog)."""
+        ratings = {r["app"]: (round(r["avg"], 1), r["n"]) for r in conn.execute(
+            "SELECT app, AVG(rating) AS avg, COUNT(*) AS n FROM reviews GROUP BY app")}
+        shots: dict = {}
+        for r in conn.execute("SELECT id, app FROM screenshots ORDER BY position, id"):
+            shots.setdefault(r["app"], []).append(r["id"])
+        return {"ratings": ratings, "screenshots": shots}
+
+    def _screenshot_urls(self, row, ids):
+        return [f"{self.config.public_url}/api/apps/{row['id']}/screenshots/{sid}" for sid in ids]
+
+    def _view(self, row, rels, user, unlocks, betas, extras=None):
         """App aus Sicht des Benutzers – None, wenn sie für ihn unsichtbar ist."""
         manage = self.can_manage(user, row)
         if not manage and (row["review"] != "approved" or row["access"] == "hidden"):
@@ -1061,35 +1231,42 @@ class Store:
             "can_manage": manage,
             # bekannt bei Upload-Apps: damit erkennt die App auch Installationen, die nicht über den Store liefen
             "package": row["package_name"],
+            "rating": {"average": (extras or {}).get("ratings", {}).get(row["key"], (0, 0))[0],
+                       "count": (extras or {}).get("ratings", {}).get(row["key"], (0, 0))[1]},
+            "screenshots": self._screenshot_urls(row, (extras or {}).get("screenshots", {}).get(row["key"], [])),
         }
 
-    def list_apps(self, user) -> list:
+    def list_apps(self, user, viewer=None) -> list:
         self.refresh_catalog()
+        viewer = viewer or (f"u{user['id']}" if user else None)
         with self.db.connect() as conn:
             unlocks, betas = self._user_sets(conn, user)
+            extras = self._extras(conn)
             result = []
             for row in self._app_rows(conn):
-                view = self._view(row, self._releases(conn, row), user, unlocks, betas)
+                view = self._view(row, self._releases(conn, row, viewer), user, unlocks, betas, extras)
                 if view:
                     result.append(view)
         return sorted(result, key=lambda a: a["name"].lower())
 
-    def app_for(self, user, app_id):
+    def app_for(self, user, app_id, viewer=None):
         self.refresh_catalog()
+        viewer = viewer or (f"u{user['id']}" if user else None)
         with self.db.connect() as conn:
             row = self._app_row(conn, app_id)
             unlocks, betas = self._user_sets(conn, user)
-            view = self._view(row, self._releases(conn, row), user, unlocks, betas)
+            view = self._view(row, self._releases(conn, row, viewer), user, unlocks, betas, self._extras(conn))
         if not view:
             raise HttpError(404, "App nicht gefunden")
         return row, view
 
-    def resolve_download(self, user, app_id: str, asset: str):
+    def resolve_download(self, user, app_id: str, asset: str, viewer=None):
         self.refresh_catalog()
+        viewer = viewer or (f"u{user['id']}" if user else None)
         with self.db.connect() as conn:
             row = self._app_row(conn, app_id)
             unlocks, betas = self._user_sets(conn, user)
-            rels = self._releases(conn, row)
+            rels = self._releases(conn, row, viewer)
             view = self._view(row, rels, user, unlocks, betas)
             if not view:
                 raise HttpError(404, "App nicht gefunden")
@@ -1109,14 +1286,122 @@ class Store:
     # --- Benachrichtigung bei neuen Versionen --------------------------------
 
     def _check_new_release(self, row, rels):
-        for channel, column in (("stable", "notified_tag"), ("beta", "notified_beta")):
+        """Neue Version erkannt: (Quell-Apps) scannen, ggf. zur Prüfung vorlegen, sonst freigeben und melden.
+
+        rels: bei Upload-Apps die freigegebenen Versionen, bei Quell-Apps der frische Stand der Quelle.
+        """
+        blocked = set(json.loads(_col(row, "blocked_tags") or "[]"))
+        for channel, column, held_col, pending_col in (("stable", "notified_tag", "held_stable", "pending_stable"),
+                                                       ("beta", "notified_beta", "held_beta", "pending_beta")):
             rel = rels.get(channel)
-            if not rel or rel["tag"] == row[column]:
+            if not rel:
                 continue
+            source = row["source_type"] != "upload"
+            if rel["tag"] == row[column]:
+                if source and not row[held_col]:  # Schnappschuss nachtragen (ältere Datenbanken)
+                    self._set_app(row["key"], **{held_col: self._snapshot(rel)})
+                continue
+            if rel["tag"] in blocked or rel.get("rollout", 100) < 100:
+                continue
+            first = row[column] is None
+            if source:
+                if self.scanner.enabled and not self._scan_done(row["key"], rel["tag"]):
+                    self._scan_source_async(row, rel)
+                    continue
+                if self._review_required(row) and not first:
+                    if row[pending_col] != rel["tag"]:
+                        self._set_app(row["key"], **{pending_col: rel["tag"]})
+                        self._notify_release_review(row, rel["tag"], channel)
+                    continue
+            self._approve(row, channel, rel, notify=not first)
+
+    def _set_app(self, key, **fields):
+        with self.db.connect() as conn:
+            conn.execute(f"UPDATE apps SET {', '.join(k + ' = ?' for k in fields)} WHERE key = ?",
+                         [*fields.values(), key])
+
+    def _approve(self, row, channel, rel, notify=True):
+        column, held_col, pending_col = (("notified_tag", "held_stable", "pending_stable") if channel == "stable"
+                                         else ("notified_beta", "held_beta", "pending_beta"))
+        fields = {column: rel["tag"], pending_col: None}
+        if row["source_type"] != "upload":
+            fields[held_col] = self._snapshot(rel)
+        self._set_app(row["key"], **fields)
+        if notify:
+            self._notify_release(row, rel, channel)
+
+    def _notify_release_review(self, row, tag, channel):
+        self._mail_admins(f"Neue Version zur Prüfung: {row['name']} {normalize_version(tag)}",
+                          intro=f"{row['developer'] or 'Ein Entwickler'} hat eine neue "
+                                f"{'Beta-' if channel == 'beta' else ''}Version von „{row['name']}“ veröffentlicht.",
+                          facts=[("App", row["id"]), ("Version", tag), ("Kanal", channel)],
+                          paragraphs=["Sie wird erst nach deiner Freigabe ausgeliefert: ByteDroide → Admin-Bereich → "
+                                      "Anfragen."])
+
+    # --- Virenscan -------------------------------------------------------------
+
+    def _scan_done(self, key, tag) -> bool:
+        with self.db.connect() as conn:
+            return conn.execute("SELECT 1 FROM scans WHERE app = ? AND tag = ?", (key, tag)).fetchone() is not None
+
+    def _mark_scanned(self, key, tag, result="clean"):
+        with self.db.connect() as conn:
+            conn.execute("INSERT OR REPLACE INTO scans VALUES (?, ?, ?, ?)", (key, tag, result, now()))
+
+    def _scan_source_async(self, row, rel):
+        job = (row["key"], rel["tag"])
+        with self._scan_lock:
+            if job in self._scanning:
+                return
+            self._scanning.add(job)
+        threading.Thread(target=self._scan_source, args=(row["key"], rel), daemon=True, name="scan").start()
+
+    def _scan_source(self, key, rel):
+        try:
+            found = None
+            for apk in rel["apks"]:
+                url, headers = apk["fetch"]
+                with self.sources.open_download(url, headers) as resp:
+                    found = self.scanner.scan_stream(resp.read)
+                if found:
+                    break
+        except scanner.ScanError as e:
+            log.warning("Virenscan von %s %s fehlgeschlagen: %s", key, rel["tag"], e)
+            if self.config.clamav_required:
+                with self._scan_lock:
+                    self._scanning.discard((key, rel["tag"]))
+                return  # später erneut versuchen
+            found = None
+        except Exception as e:
+            log.warning("Download für Virenscan von %s %s fehlgeschlagen: %s", key, rel["tag"], e)
+            with self._scan_lock:
+                self._scanning.discard((key, rel["tag"]))
+            return
+        with self.db.connect() as conn:
+            row = self._app_row(conn, key, retry=False)
+        self._mark_scanned(key, rel["tag"], found or "clean")
+        if found:
+            self._block(row, rel["tag"], f"Schadsoftware gefunden: {found}")
+        with self._scan_lock:
+            self._scanning.discard((key, rel["tag"]))
+        if not found:
             with self.db.connect() as conn:
-                conn.execute(f"UPDATE apps SET {column} = ? WHERE key = ?", (rel["tag"], row["key"]))
-            if row[column] is not None:  # beim ersten Mal nur merken
-                self._notify_release(row, rel, channel)
+                row = self._app_row(conn, key, retry=False)
+            self._check_new_release(row, self.sources.cached(row))
+
+    def _block(self, row, tag, reason):
+        blocked = set(json.loads(_col(row, "blocked_tags") or "[]")) | {tag}
+        fields = {"blocked_tags": json.dumps(sorted(blocked))}
+        for col in ("pending_stable", "pending_beta"):
+            if row[col] == tag:
+                fields[col] = None
+        self._set_app(row["key"], **fields)
+        log.warning("Version %s von %s gesperrt: %s", tag, row["id"], reason)
+        if reason.startswith("Schadsoftware"):
+            self._mail_admins(f"⚠ Schadsoftware in {row['name']} {tag}",
+                              intro=f"Der Virenscan hat in „{row['name']}“ Version {tag} etwas gefunden. "
+                                    "Die Version wird nicht ausgeliefert.",
+                              facts=[("App", row["id"]), ("Version", tag), ("Fund", reason.split(": ", 1)[-1])])
 
     def _notify_release(self, row, rel, channel):
         if row["review"] != "approved" or row["access"] == "hidden":
@@ -1127,11 +1412,11 @@ class Store:
                     return
                 users = conn.execute(
                     "SELECT u.* FROM beta_testers b JOIN users u ON u.id = b.user_id "
-                    "WHERE b.app = ? AND u.notify_updates = 1 AND u.email_verified = 1", (row["key"],)).fetchall()
+                    "WHERE b.app = ? AND u.notify_updates = 1 AND (u.email_verified = 1 OR u.ntfy_topic != '')", (row["key"],)).fetchall()
             else:
                 users = conn.execute(
                     "SELECT DISTINCT u.* FROM downloads d JOIN users u ON u.id = d.user_id "
-                    "WHERE d.app = ? AND u.notify_updates = 1 AND u.email_verified = 1", (row["key"],)).fetchall()
+                    "WHERE d.app = ? AND u.notify_updates = 1 AND (u.email_verified = 1 OR u.ntfy_topic != '')", (row["key"],)).fetchall()
             unlocked = {r["user_id"] for r in conn.execute("SELECT user_id FROM unlocks WHERE app = ?", (row["key"],))}
         needs_unlock = row["access"] == "code" or row["price_cents"] > 0
         notes = (rel["notes"] or "").strip()
@@ -1286,6 +1571,16 @@ class Store:
             "sales": sales["n"], "revenue_cents": sales["total"], "currency": self.config.currency,
             "codes_open": codes["open"] or 0, "codes_used": codes["used"] or 0, "testers": testers,
             "unlocked_users": unlocked, "created_at": row["created_at"],
+            "pending_versions": [v for v in (row["pending_stable"], row["pending_beta"]) if v] + [
+                r["version"] for r in conn.execute("SELECT version FROM releases WHERE app_key = ? AND status = 'pending'",
+                                                   (key,))],
+            "blocked_versions": json.loads(row["blocked_tags"] or "[]"),
+            "screenshots": [{"id": r["id"], "url": f"{self.config.public_url}/api/apps/{row['id']}/screenshots/{r['id']}"}
+                            for r in conn.execute("SELECT id FROM screenshots WHERE app = ? ORDER BY position, id",
+                                                  (key,))],
+            "rating": dict(zip(("average", "count"), conn.execute(
+                "SELECT COALESCE(ROUND(AVG(rating), 1), 0), COUNT(*) FROM reviews WHERE app = ?", (key,)).fetchone())),
+            "review_releases": self._review_required(row),
         }
 
     def dev_apps(self, user, all_apps=False) -> list:
@@ -1404,8 +1699,9 @@ class Store:
         row = self._require_manage(user, app_id)
         with self.db.connect() as conn:
             paths = [r["path"] for r in conn.execute("SELECT path FROM releases WHERE app_key = ?", (row["key"],))]
+            paths += [r["path"] for r in conn.execute("SELECT path FROM screenshots WHERE app = ?", (row["key"],))]
             conn.execute("DELETE FROM apps WHERE key = ?", (row["key"],))
-            for table in ("codes", "unlocks", "beta_testers"):
+            for table in ("codes", "unlocks", "beta_testers", "reviews", "screenshots", "scans"):
                 conn.execute(f"DELETE FROM {table} WHERE app = ?", (row["key"],))
         for p in paths + ([row["icon_path"]] if row["icon_path"] else []):
             try:
@@ -1421,11 +1717,12 @@ class Store:
         with self.db.connect() as conn:
             return [{"id": r["id"], "version": r["version"], "version_code": r["version_code"], "notes": r["notes"],
                      "channel": r["channel"], "file_name": r["file_name"], "size": r["size"], "sha256": r["sha256"],
-                     "created_at": r["created_at"]}
+                     "created_at": r["created_at"], "status": r["status"], "rollout": r["rollout"], "scan": r["scan"],
+                     "review_note": r["review_note"]}
                     for r in conn.execute("SELECT * FROM releases WHERE app_key = ? ORDER BY created_at DESC, id DESC",
                                           (row["key"],))]
 
-    def add_release(self, user, app_id, tmp_path, size, sha256, version, channel, notes) -> dict:
+    def add_release(self, user, app_id, tmp_path, size, sha256, version, channel, notes, rollout=100) -> dict:
         row = self._require_manage(user, app_id)
         if row["source_type"] != "upload":
             raise HttpError(400, "Diese App bezieht ihre Versionen aus der Quelle – dort ein Release anlegen")
@@ -1448,6 +1745,9 @@ class Store:
                                  "Sonst erkennt die App Updates nicht richtig.")
         if row["package_name"] and info["package"] != row["package_name"]:
             raise HttpError(400, f"Falsche App: Paket {info['package']} statt {row['package_name']}")
+        rollout = self._check_rollout(rollout) if channel == "stable" else 100
+        scan = self._scan_upload(row, tmp_path, version)
+        status = "pending" if self._review_required(row) else "approved"
         with self.db.connect() as conn:
             other = conn.execute("SELECT key FROM apps WHERE package_name = ? AND key != ?",
                                  (info["package"], row["key"])).fetchone()
@@ -1466,16 +1766,63 @@ class Store:
             file_name = f"{row['key'].split('/')[1]}-{normalize_version(version)}{suffix}.apk"
             cur = conn.execute(
                 "INSERT INTO releases (app_key, version, version_code, notes, channel, file_name, size, sha256, path, "
-                "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "created_at, status, rollout, scan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (row["key"], version, info["version_code"], (notes or "").strip()[:4000], channel, file_name, size,
-                 sha256, rel_path, now()))
+                 sha256, rel_path, now(), status, rollout, scan))
             conn.execute("UPDATE apps SET package_name = ?, updated_at = ? WHERE key = ?",
                          (info["package"], now(), row["key"]))
             rels = self._upload_releases(conn, row["key"])
             row = self._app_row(conn, row["key"])
-        self._check_new_release(row, rels)
+        if status == "pending":
+            self._notify_release_review(row, version, channel)
+        else:
+            self._check_new_release(row, rels)
         return {"id": cur.lastrowid, "version": version, "version_code": info["version_code"],
-                "package": info["package"], "channel": channel, "size": size, "sha256": sha256}
+                "package": info["package"], "channel": channel, "size": size, "sha256": sha256,
+                "status": status, "rollout": rollout, "scan": scan}
+
+    @staticmethod
+    def _check_rollout(value) -> int:
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise HttpError(400, "Rollout muss eine Zahl von 1 bis 100 sein")
+        if not 1 <= value <= 100:
+            raise HttpError(400, "Rollout muss zwischen 1 und 100 Prozent liegen")
+        return value
+
+    def _scan_upload(self, row, path, version) -> str:
+        if not self.scanner.enabled:
+            return ""
+        try:
+            found = self.scanner.scan_file(path)
+        except scanner.ScanError as e:
+            if self.config.clamav_required:
+                raise HttpError(503, f"Virenscan gerade nicht möglich – bitte später erneut hochladen ({e})")
+            log.warning("Upload %s %s ungescannt: %s", row["id"], version, e)
+            return "unscanned"
+        if found:
+            self._mail_admins(f"⚠ Schadsoftware-Upload abgelehnt: {row['name']}",
+                              intro=f"Ein Upload für „{row['name']}“ ({version}) wurde vom Virenscan abgelehnt.",
+                              facts=[("App", row["id"]), ("Version", version), ("Fund", found),
+                                     ("Entwickler", row["developer"] or "–")])
+            raise HttpError(400, f"Upload abgelehnt: Der Virenscan hat Schadsoftware gefunden ({found})")
+        return "clean"
+
+    def set_rollout(self, user, app_id, release_id, rollout) -> dict:
+        row = self._require_manage(user, app_id)
+        rollout = self._check_rollout(rollout)
+        with self.db.connect() as conn:
+            rel = conn.execute("SELECT * FROM releases WHERE id = ? AND app_key = ?", (release_id, row["key"])).fetchone()
+            if not rel:
+                raise HttpError(404, "Version nicht gefunden")
+            if rel["channel"] != "stable":
+                raise HttpError(400, "Gestaffelte Rollouts gibt es nur im stabilen Kanal")
+            conn.execute("UPDATE releases SET rollout = ? WHERE id = ?", (rollout, release_id))
+            rels = self._upload_releases(conn, row["key"])
+            row = self._app_row(conn, row["key"])
+        self._check_new_release(row, rels)  # bei 100 % gehen jetzt die Update-Benachrichtigungen raus
+        return {"id": release_id, "rollout": rollout}
 
     def delete_release(self, user, app_id, release_id):
         row = self._require_manage(user, app_id)
@@ -1510,6 +1857,201 @@ class Store:
             except OSError:
                 pass
         return {"avatar_url": f"{self.config.public_url}/api/apps/{row['id']}/icon?v={os.path.basename(path)[:8]}"}
+
+    # --- Prüfung neuer Versionen (Admin) ------------------------------------------
+
+    def pending_releases(self) -> list:
+        self.refresh_catalog()
+        result = []
+        with self.db.connect() as conn:
+            for r in conn.execute("SELECT r.*, a.id AS app_id, a.name, u.username AS developer FROM releases r "
+                                  "JOIN apps a ON a.key = r.app_key LEFT JOIN users u ON u.id = a.developer_id "
+                                  "WHERE r.status = 'pending' ORDER BY r.created_at"):
+                result.append({"app": r["app_id"], "name": r["name"], "developer": r["developer"],
+                               "channel": r["channel"], "version": r["version"], "notes": r["notes"],
+                               "release_id": r["id"], "created_at": r["created_at"], "scan": r["scan"],
+                               "source": "upload"})
+            rows = [r for r in self._app_rows(conn) if r["pending_stable"] or r["pending_beta"]]
+        for row in rows:
+            cache = self.sources.cached(row)
+            for channel, col in (("stable", "pending_stable"), ("beta", "pending_beta")):
+                rel = cache.get(channel)
+                if row[col] and rel and rel["tag"] == row[col]:
+                    result.append({"app": row["id"], "name": row["name"], "developer": row["developer"],
+                                   "channel": channel, "version": rel["tag"], "notes": rel["notes"],
+                                   "release_id": None, "created_at": None, "scan": "", "source": self._html_url(row)})
+        return result
+
+    def decide_release(self, actor, app_id, channel, approve: bool, release_id=None, note="") -> dict:
+        note = (note or "").strip()[:1000]
+        with self.db.connect() as conn:
+            row = self._app_row(conn, app_id)
+            dev = self._user(conn, row["developer_id"]) if row["developer_id"] else None
+            if row["source_type"] == "upload":
+                rel = conn.execute("SELECT * FROM releases WHERE id = ? AND app_key = ? AND status = 'pending'",
+                                   (release_id or 0, row["key"])).fetchone()
+                if not rel:
+                    raise HttpError(404, "Keine wartende Version gefunden")
+                conn.execute("UPDATE releases SET status = ?, review_note = ? WHERE id = ?",
+                             ("approved" if approve else "rejected", note, rel["id"]))
+                version = rel["version"]
+                rels = self._upload_releases(conn, row["key"])
+            else:
+                col = "pending_stable" if channel == "stable" else "pending_beta"
+                version = row[col]
+                rel = self.sources.cached(row).get(channel)
+                if not version or not rel or rel["tag"] != version:
+                    raise HttpError(404, "Keine wartende Version gefunden")
+        if row["source_type"] == "upload":
+            if approve:
+                self._check_new_release(row, rels)
+        elif approve:
+            self._approve(row, channel, rel)
+        else:
+            self._block(row, version, "abgelehnt")
+        if dev:
+            self._mail_user(dev, f"{row['name']} {normalize_version(version)}: "
+                                 f"{'freigegeben' if approve else 'nicht freigegeben'}",
+                            intro=(f"Hallo {dev['username']}, Version {version} von „{row['name']}“ ist jetzt "
+                                   "veröffentlicht." if approve else
+                                   f"Hallo {dev['username']}, Version {version} von „{row['name']}“ wurde nicht "
+                                   "freigegeben."),
+                            paragraphs=[f"Begründung: {note}"] if note else [])
+        return {"ok": True}
+
+    # --- Bewertungen ---------------------------------------------------------------
+
+    def reviews(self, user, app_id) -> dict:
+        row, view = self.app_for(user, app_id)
+        with self.db.connect() as conn:
+            rows = conn.execute("SELECT r.*, u.username FROM reviews r JOIN users u ON u.id = r.user_id "
+                                "WHERE r.app = ? ORDER BY r.updated_at DESC LIMIT 200", (row["key"],)).fetchall()
+            stats = conn.execute("SELECT rating, COUNT(*) AS n FROM reviews WHERE app = ? GROUP BY rating",
+                                 (row["key"],)).fetchall()
+            downloaded = bool(user) and conn.execute("SELECT 1 FROM downloads WHERE app = ? AND user_id = ? LIMIT 1",
+                                                     (row["key"], user["id"])).fetchone() is not None
+        dist = {r["rating"]: r["n"] for r in stats}
+        count = sum(dist.values())
+        own = bool(user) and row["developer_id"] == user["id"]
+        items = [{"user_id": r["user_id"], "username": r["username"], "rating": r["rating"], "text": r["text"],
+                  "version": r["version"], "created_at": r["created_at"], "updated_at": r["updated_at"],
+                  "reply": r["reply"], "reply_at": r["reply_at"], "mine": bool(user) and r["user_id"] == user["id"]}
+                 for r in rows]
+        return {
+            "average": round(sum(k * v for k, v in dist.items()) / count, 1) if count else 0,
+            "count": count,
+            "distribution": [dist.get(i, 0) for i in (5, 4, 3, 2, 1)],
+            "reviews": items,
+            "can_review": downloaded and not own,
+            "can_reply": self.can_manage(user, row),
+            "mine": next((i for i in items if i["mine"]), None),
+        }
+
+    def set_review(self, user, app_id, rating, text) -> dict:
+        row, view = self.app_for(user, app_id)
+        try:
+            rating = int(rating)
+        except (TypeError, ValueError):
+            rating = 0
+        if not 1 <= rating <= 5:
+            raise HttpError(400, "Bitte 1 bis 5 Sterne vergeben")
+        text = (text or "").strip()[:2000]
+        if row["developer_id"] == user["id"]:
+            raise HttpError(403, "Die eigene App kann man nicht bewerten")
+        with self.db.connect() as conn:
+            dl = conn.execute("SELECT version FROM downloads WHERE app = ? AND user_id = ? ORDER BY ts DESC LIMIT 1",
+                              (row["key"], user["id"])).fetchone()
+            if not dl:
+                raise HttpError(403, "Bewerten kann nur, wer die App über ByteDroide geladen hat")
+            existed = conn.execute("SELECT 1 FROM reviews WHERE app = ? AND user_id = ?",
+                                   (row["key"], user["id"])).fetchone()
+            conn.execute("INSERT INTO reviews (app, user_id, rating, text, version, created_at, updated_at) "
+                         "VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(app, user_id) DO UPDATE SET rating = excluded.rating, "
+                         "text = excluded.text, version = excluded.version, updated_at = excluded.updated_at",
+                         (row["key"], user["id"], rating, text, dl["version"], now(), now()))
+            dev = self._user(conn, row["developer_id"]) if row["developer_id"] else None
+        if dev and not existed:
+            self._mail_user(dev, f"Neue Bewertung für {row['name']}: {'★' * rating}{'☆' * (5 - rating)}",
+                            intro=f"{user['username']} hat {row['name']} mit {rating} von 5 Sternen bewertet.",
+                            paragraphs=[f"„{text}“"] if text else [],
+                            button=("Bewertungen ansehen", f"{self.config.public_url}/app/{row['id']}"),
+                            reason="Du erhältst diese E-Mail als Entwickler dieser App.")
+        return self.reviews(user, app_id)
+
+    def delete_review(self, user, app_id, user_id=None):
+        with self.db.connect() as conn:
+            row = self._app_row(conn, app_id)
+            target = user["id"] if user_id is None else user_id
+            if target != user["id"] and user["role"] != "admin":
+                raise HttpError(403, "Nur Admins können fremde Bewertungen löschen")
+            if not conn.execute("DELETE FROM reviews WHERE app = ? AND user_id = ?", (row["key"], target)).rowcount:
+                raise HttpError(404, "Bewertung nicht gefunden")
+
+    def reply_review(self, actor, app_id, user_id, text) -> dict:
+        text = (text or "").strip()[:2000]
+        with self.db.connect() as conn:
+            row = self._app_row(conn, app_id)
+            if not self.can_manage(actor, row):
+                raise HttpError(403, "Nicht deine App")
+            if not conn.execute("UPDATE reviews SET reply = ?, reply_at = ? WHERE app = ? AND user_id = ?",
+                                (text, now() if text else None, row["key"], user_id)).rowcount:
+                raise HttpError(404, "Bewertung nicht gefunden")
+            reviewer = self._user(conn, user_id)
+        if text and reviewer:
+            self._mail_user(reviewer, f"Antwort auf deine Bewertung von {row['name']}",
+                            intro=f"Der Entwickler von {row['name']} hat auf deine Bewertung geantwortet:",
+                            paragraphs=[f"„{text}“"],
+                            button=("Ansehen", f"{self.config.public_url}/app/{row['id']}"))
+        return self.reviews(actor, app_id)
+
+    # --- Screenshots -----------------------------------------------------------------
+
+    MAX_SCREENSHOTS = 8
+
+    def add_screenshot(self, user, app_id, data: bytes) -> dict:
+        row = self._require_manage(user, app_id)
+        ext = _image_ext(data)
+        if not ext:
+            raise HttpError(400, "Screenshot muss PNG, JPEG oder WebP sein")
+        with self.db.connect() as conn:
+            n = conn.execute("SELECT COUNT(*) FROM screenshots WHERE app = ?", (row["key"],)).fetchone()[0]
+            if n >= self.MAX_SCREENSHOTS:
+                raise HttpError(400, f"Höchstens {self.MAX_SCREENSHOTS} Screenshots pro App")
+            path = os.path.join("screenshots", f"{hashlib.sha256(data).hexdigest()[:24]}.{ext}")
+            with open(os.path.join(self.config.data_dir, path), "wb") as f:
+                f.write(data)
+            cur = conn.execute("INSERT INTO screenshots (app, path, position, created_at) VALUES (?, ?, ?, ?)",
+                               (row["key"], path, n, now()))
+        return {"screenshots": self.list_screenshots(row), "id": cur.lastrowid}
+
+    def list_screenshots(self, row) -> list:
+        with self.db.connect() as conn:
+            ids = [r["id"] for r in conn.execute("SELECT id FROM screenshots WHERE app = ? ORDER BY position, id",
+                                                 (row["key"],))]
+        return [{"id": i, "url": u} for i, u in zip(ids, self._screenshot_urls(row, ids))]
+
+    def delete_screenshot(self, user, app_id, shot_id):
+        row = self._require_manage(user, app_id)
+        with self.db.connect() as conn:
+            shot = conn.execute("SELECT * FROM screenshots WHERE id = ? AND app = ?", (shot_id, row["key"])).fetchone()
+            if not shot:
+                raise HttpError(404, "Screenshot nicht gefunden")
+            conn.execute("DELETE FROM screenshots WHERE id = ?", (shot_id,))
+            still_used = conn.execute("SELECT 1 FROM screenshots WHERE path = ?", (shot["path"],)).fetchone()
+        if not still_used:
+            try:
+                os.remove(os.path.join(self.config.data_dir, shot["path"]))
+            except OSError:
+                pass
+        return {"screenshots": self.list_screenshots(row)}
+
+    def screenshot_file(self, app_id, shot_id):
+        with self.db.connect() as conn:
+            row = self._app_row(conn, app_id, retry=False)
+            shot = conn.execute("SELECT * FROM screenshots WHERE id = ? AND app = ?", (shot_id, row["key"])).fetchone()
+        if not shot:
+            raise HttpError(404, "Screenshot nicht gefunden")
+        return os.path.join(self.config.data_dir, shot["path"])
 
     # --- Admin -----------------------------------------------------------------
 
@@ -1646,7 +2188,8 @@ class Store:
         if not subject or not message:
             raise HttpError(400, "Betreff und Nachricht angeben")
         with self.db.connect() as conn:
-            users = conn.execute("SELECT * FROM users WHERE notify_news = 1 AND email_verified = 1").fetchall()
+            users = conn.execute("SELECT * FROM users WHERE notify_news = 1 AND "
+                                 "(email_verified = 1 OR ntfy_topic != '')").fetchall()
         for u in users:
             self._mail_user(u, subject, intro=f"Hallo {u['username']},", paragraphs=message.split("\n\n"),
                             reason="Du erhältst diese E-Mail, weil du Neuigkeiten von ByteDroide abonniert hast. "
@@ -1669,6 +2212,12 @@ class Store:
                 "mail_enabled": self.mailer.enabled,
                 "payments_enabled": bool(self.config.stripe_secret_key),
                 "legal_missing": legal.missing_fields(self.config),
+                "releases_pending": one("SELECT COUNT(*) FROM releases WHERE status = 'pending'") + one(
+                    "SELECT COUNT(*) FROM apps WHERE pending_stable IS NOT NULL") + one(
+                    "SELECT COUNT(*) FROM apps WHERE pending_beta IS NOT NULL"),
+                "review_releases": self.config.review_releases,
+                "scanner_enabled": self.scanner.enabled,
+                "push_enabled": self.pusher.enabled,
             }
 
     # --- Käufe (Stripe) ------------------------------------------------------------
@@ -1905,6 +2454,13 @@ class Handler(BaseHTTPRequestHandler):
                 return fwd.split(",")[0].strip()
         return self.client_address[0]
 
+    def viewer(self, user) -> str:
+        """Kennung für gestaffelte Rollouts: Konto, sonst Installations-ID der App, sonst IP."""
+        if user:
+            return f"u{user['id']}"
+        install = re.sub(r"[^A-Za-z0-9-]", "", self.headers.get("X-Install-Id", ""))[:64]
+        return f"i{install}" if install else f"ip{self.client_ip()}"
+
     def bearer(self):
         auth = self.headers.get("Authorization", "")
         return auth[7:].strip() if auth.startswith("Bearer ") else None
@@ -2067,8 +2623,9 @@ class Handler(BaseHTTPRequestHandler):
     # --- Webseiten -------------------------------------------------------------
 
     @route("GET", "/")
-    def w_index(self, **_):
-        self.send_html(legal.landing(self.store.config))
+    def w_index(self, user, query, **_):
+        apps = self.store.list_apps(None, self.viewer(None))
+        self.send_html(storefront.catalog(self.store.config, apps, query.get("q", ""), query.get("kategorie", "")))
 
     @route("GET", "/robots.txt")
     def w_robots(self, **_):
@@ -2133,19 +2690,39 @@ class Handler(BaseHTTPRequestHandler):
 
     @route("GET", f"/app/{APP_ID}")
     def w_app(self, user, params, **_):
-        import html as h
+        _, view = self.store.app_for(None, app_id(params), self.viewer(None))
+        reviews = self.store.reviews(None, app_id(params))
+        self.send_html(storefront.app_page(self.store.config, view, reviews))
+
+    @route("GET", f"/app/{APP_ID}/qr.svg")
+    def w_app_qr(self, params, **_):
         _, view = self.store.app_for(None, app_id(params))
-        deep = h.escape(f"bytedroide://app/{view['id']}")
-        body = (f"<p><strong>{h.escape(view['name'])}</strong> von {h.escape(view['owner'])} · Version "
-                f"{h.escape(normalize_version(view['release']['tag']))}</p><p>{h.escape(view['description'])}</p>"
-                f'<p><a href="{deep}">In ByteDroide öffnen</a> · <a href="/download">ByteDroide herunterladen</a></p>')
-        self.send_html(legal.page(self.store.config, view["name"], f"<section>{body}</section>"))
+        data = qrcode_svg.svg(f"{self.store.config.public_url}/app/{view['id']}", module=10).encode()
+        self.send_bytes(200, data, "image/svg+xml",
+                        {"Cache-Control": "public, max-age=86400",
+                         "Content-Disposition": f'inline; filename="{view["id"].replace("/", "-")}-qr.svg"'})
+
+    @route("GET", "/download/qr.svg")
+    def w_download_qr(self, **_):
+        data = qrcode_svg.svg(f"{self.store.config.public_url}/download", module=10).encode()
+        self.send_bytes(200, data, "image/svg+xml", {"Cache-Control": "public, max-age=86400"})
+
+    @route("GET", "/.well-known/assetlinks.json")
+    def w_assetlinks(self, **_):
+        c = self.store.config
+        if not c.android_cert_sha256:
+            raise HttpError(404, "Nicht eingerichtet (ANDROID_CERT_SHA256)")
+        fingerprints = [f.strip().upper() for f in re.split(r"[,; ]+", c.android_cert_sha256) if f.strip()]
+        data = [{"relation": ["delegate_permission/common.handle_all_urls"],
+                 "target": {"namespace": "android_app", "package_name": c.android_package,
+                            "sha256_cert_fingerprints": fingerprints}}]
+        self.send_bytes(200, json.dumps(data).encode(), "application/json", {"Cache-Control": "public, max-age=3600"})
 
     @route("GET", "/download")
     def w_download_store(self, user, **_):
         if not self.store.config.store_app_id:
             raise HttpError(404, "Download noch nicht eingerichtet (STORE_APP_ID)")
-        self.send_apk(self.store.resolve_download(None, self.store.config.store_app_id, ""))
+        self.send_apk(self.store.resolve_download(None, self.store.config.store_app_id, "", self.viewer(None)))
 
     @route("GET", "/portal")
     def w_portal(self, **_):
@@ -2166,7 +2743,8 @@ class Handler(BaseHTTPRequestHandler):
                 "payments_enabled": bool(c.stripe_secret_key),
                 "legal": {"impressum": f"{base}/impressum", "datenschutz": f"{base}/datenschutz",
                           "agb": f"{base}/agb", "widerruf": f"{base}/widerruf"},
-                "portal": f"{base}/portal", "operator_email": c.operator_email}
+                "portal": f"{base}/portal", "operator_email": c.operator_email,
+                "ntfy_url": self.store.pusher.base_url if self.store.pusher.enabled else ""}
 
     @route("POST", "/api/register")
     def r_register(self, **_):
@@ -2229,11 +2807,12 @@ class Handler(BaseHTTPRequestHandler):
 
     @route("GET", "/api/apps")
     def r_apps(self, user, **_):
-        return {"apps": self.store.list_apps(user), "user": self.store.user_json(user) if user else None}
+        return {"apps": self.store.list_apps(user, self.viewer(user)),
+                "user": self.store.user_json(user) if user else None}
 
     @route("GET", f"/api/apps/{APP_ID}/download")
     def r_download(self, user, params, query, **_):
-        self.send_apk(self.store.resolve_download(user, app_id(params), query.get("asset", "")))
+        self.send_apk(self.store.resolve_download(user, app_id(params), query.get("asset", ""), self.viewer(user)))
 
     @route("GET", f"/api/apps/{APP_ID}/icon")
     def r_icon(self, params, **_):
@@ -2318,7 +2897,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._body_left -= len(chunk)
             notes = query.get("notes") or urllib.parse.unquote(self.headers.get("X-Release-Notes", ""))
             return self.store.add_release(user, aid, tmp, length, digest.hexdigest(), query.get("version", ""),
-                                          query.get("channel", "stable"), notes)
+                                          query.get("channel", "stable"), notes, query.get("rollout", 100))
         finally:
             if os.path.exists(tmp):
                 os.remove(tmp)
@@ -2379,6 +2958,70 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True}
 
     # --- API: Admin ------------------------------------------------------------------
+
+    @route("PUT", rf"/api/dev/apps/{APP_ID}/releases/(?P<rid>\d+)", auth="developer")
+    def r_dev_rollout(self, user, params, **_):
+        return self.store.set_rollout(user, app_id(params), int(params["rid"]), self.body().get("rollout"))
+
+    @route("POST", f"/api/dev/apps/{APP_ID}/screenshots", auth="developer")
+    def r_dev_add_shot(self, user, params, **_):
+        return self.store.add_screenshot(user, app_id(params), self.raw_body(3 * 1024 * 1024))
+
+    @route("DELETE", rf"/api/dev/apps/{APP_ID}/screenshots/(?P<sid>\d+)", auth="developer")
+    def r_dev_delete_shot(self, user, params, **_):
+        return self.store.delete_screenshot(user, app_id(params), int(params["sid"]))
+
+    @route("PUT", rf"/api/dev/apps/{APP_ID}/reviews/(?P<uid>\d+)/reply", auth="developer")
+    def r_dev_reply(self, user, params, **_):
+        return self.store.reply_review(user, app_id(params), int(params["uid"]), self.body().get("text", ""))
+
+    # Bewertungen & Screenshots (öffentlich)
+    @route("GET", f"/api/apps/{APP_ID}/reviews")
+    def r_reviews(self, user, params, **_):
+        return self.store.reviews(user, app_id(params))
+
+    @route("PUT", f"/api/apps/{APP_ID}/reviews", auth="user")
+    def r_set_review(self, user, params, **_):
+        b = self.body()
+        return self.store.set_review(user, app_id(params), b.get("rating"), b.get("text", ""))
+
+    @route("DELETE", f"/api/apps/{APP_ID}/reviews", auth="user")
+    def r_delete_review(self, user, params, **_):
+        self.store.delete_review(user, app_id(params))
+        return self.store.reviews(user, app_id(params))
+
+    @route("GET", rf"/api/apps/{APP_ID}/screenshots/(?P<sid>\d+)")
+    def r_shot(self, params, **_):
+        path = self.store.screenshot_file(app_id(params), int(params["sid"]))
+        ext = path.rsplit(".", 1)[-1]
+        with open(path, "rb") as f:
+            self.send_bytes(200, f.read(), {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext],
+                            {"Cache-Control": "public, max-age=604800"})
+
+    # Push über ntfy
+    @route("POST", "/api/me/ntfy", auth="user")
+    def r_ntfy(self, user, **_):
+        return self.store.set_ntfy(user, bool(self.body().get("enable", True)))
+
+    @route("POST", "/api/me/ntfy/test", auth="user")
+    def r_ntfy_test(self, user, **_):
+        return self.store.test_ntfy(user)
+
+    # Admin: Versionen prüfen, Bewertungen moderieren
+    @route("GET", "/api/admin/releases", auth="admin")
+    def r_pending_releases(self, **_):
+        return {"releases": self.store.pending_releases()}
+
+    @route("POST", "/api/admin/releases/decide", auth="admin")
+    def r_decide_release(self, user, **_):
+        b = self.body()
+        return self.store.decide_release(user, b.get("app", ""), b.get("channel", "stable"), bool(b.get("approve")),
+                                         b.get("release_id"), b.get("note", ""))
+
+    @route("DELETE", rf"/api/admin/apps/{APP_ID}/reviews/(?P<uid>\d+)", auth="admin")
+    def r_admin_delete_review(self, user, params, **_):
+        self.store.delete_review(user, app_id(params), int(params["uid"]))
+        return {"ok": True}
 
     @route("GET", "/api/admin/overview", auth="admin")
     def r_overview(self, **_):
@@ -2451,8 +3094,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.store.refund_purchase(user, int(params["id"]))
 
 
-def make_server(config: Config, sources: Sources = None, mailer=None, stripe=None) -> ThreadingHTTPServer:
-    store = Store(config, Database(config.db_path), sources or Sources(config), mailer=mailer, stripe=stripe)
+def make_server(config: Config, sources: Sources = None, mailer=None, stripe=None, pusher=None,
+                virus_scanner=None) -> ThreadingHTTPServer:
+    store = Store(config, Database(config.db_path), sources or Sources(config), mailer=mailer, stripe=stripe,
+                  pusher=pusher, virus_scanner=virus_scanner)
     handler = type("BoundHandler", (Handler,), {"store": store})
     server = ThreadingHTTPServer((config.host, config.port), handler)
     server.daemon_threads = True
