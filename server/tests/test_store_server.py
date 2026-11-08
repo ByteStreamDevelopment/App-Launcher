@@ -49,8 +49,8 @@ class FakeCatalog(ss.Catalog):
 class StoreServerTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        config = ss.Config({"ADMIN_PASSWORD": ADMIN_PW, "DB_PATH": os.path.join(self.tmp.name, "t.db"),
-                            "HOST": "127.0.0.1", "PORT": "0"})
+        config = ss.Config({"DB_PATH": os.path.join(self.tmp.name, "t.db"), "HOST": "127.0.0.1", "PORT": "0"})
+        config.admin_password_hash = ss.hash_password(ADMIN_PW)  # Test-Passwort statt des echten
         self.server = ss.make_server(config, FakeCatalog(config, fetcher=fake_fetch))
         self.base = f"http://127.0.0.1:{self.server.server_address[1]}"
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
@@ -208,19 +208,10 @@ class StoreServerTest(unittest.TestCase):
 
 
 class AdminPasswordConfigTest(unittest.TestCase):
-    def test_eingebauter_hash_ist_standard(self):
-        config = ss.Config({})
-        self.assertEqual(config.admin_password_hash, ss.DEFAULT_ADMIN_PASSWORD_HASH)
-        self.assertFalse(ss.verify_password("falsch", config.admin_password_hash))
-
-    def test_hash_aus_umgebung(self):
-        h = ss.hash_password("anderes-passwort")
-        config = ss.Config({"ADMIN_PASSWORD_HASH": h})
-        self.assertTrue(ss.verify_password("anderes-passwort", config.admin_password_hash))
-
-    def test_klartext_hat_vorrang(self):
-        config = ss.Config({"ADMIN_PASSWORD": "klartext123", "ADMIN_PASSWORD_HASH": ss.hash_password("x")})
-        self.assertTrue(ss.verify_password("klartext123", config.admin_password_hash))
+    def test_passwort_fest_eingebaut(self):
+        config = ss.Config({"ADMIN_PASSWORD": "versuch123", "ADMIN_PASSWORD_HASH": ss.hash_password("x")})
+        self.assertEqual(config.admin_password_hash, ss.ADMIN_PASSWORD_HASH)
+        self.assertFalse(ss.verify_password("versuch123", config.admin_password_hash))
 
 
 class HelperTest(unittest.TestCase):

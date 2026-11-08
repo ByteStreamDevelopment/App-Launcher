@@ -9,12 +9,13 @@
   Stand 2026-11: einzige App mit APK-Release ist `Manhunt/manhunt` (z. B. `v2.5.0`, Asset `manhunt-v2.5.0.apk`).
 - **Architektur (seit v1.1)**: App → eigener **Store-Server** (`server/store_server.py`, Python-Stdlib + SQLite,
   Docker) → Forgejo. Die App spricht NICHT mehr direkt mit Forgejo. Der Server hält den Forgejo-Token.
-- **Rechte**: Haupt-Admin `ProfImpossible` (nur mit `ADMIN_PASSWORD` registrierbar, nie entfernbar/löschbar).
+  Server-Adresse ist FEST `https://apps.nebendahl.eu` (`StoreSettings.SERVER_URL`), kein Eingabefeld in der App.
+- **Rechte**: Haupt-Admin `ProfImpossible` (nur mit dem Admin-Passwort registrierbar, nie entfernbar/löschbar).
   Admins können andere zu Admins machen. Normale Registrierung ist offen (ohne Admin-Passwort).
   App-Freigabe pro App: `open` / `code` (Einmal-Code, schaltet dauerhaft pro Konto frei) / `hidden`.
-  Das Admin-Passwort steht NICHT im Klartext im Repo, nur als scrypt-Hash (`DEFAULT_ADMIN_PASSWORD_HASH` in
-  `store_server.py`); der Nutzer hat das Passwort. Überschreibbar per `ADMIN_PASSWORD`/`ADMIN_PASSWORD_HASH`.
-- **Server testen**: `python3 -m unittest discover -s server/tests` (14 Tests, Fake-Forgejo).
+  Das Admin-Passwort ist FEST eingebaut, nur als scrypt-Hash (`ADMIN_PASSWORD_HASH` in `store_server.py`), NICHT
+  in der `.env` (Nutzerwunsch). Klartext nie ins Repo; der Nutzer kennt das Passwort.
+- **Server testen**: `python3 -m unittest discover -s server/tests` (12 Tests, Fake-Forgejo).
 - **GitHub-Repo**: `bytestreamdevelopment/app-launcher`.
 - **App-Technik**: Kotlin, Jetpack Compose (Material 3), minSdk 26, targetSdk/compileSdk 35, AGP 8.7.3,
   Kotlin 2.0.21, Gradle-Wrapper 8.11.1, JDK 17. Keine Netzwerk-Bibliothek (HttpURLConnection + org.json), Coil für Bilder,

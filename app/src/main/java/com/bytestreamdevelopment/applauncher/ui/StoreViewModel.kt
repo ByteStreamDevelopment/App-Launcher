@@ -54,7 +54,6 @@ data class UiState(
     val message: String? = null,
     val needsInstallPermission: Boolean = false,
     val user: UserInfo? = null,
-    val serverConfigured: Boolean = true,
     /** Code-Dialog offen (optional mit vorgewählter App) */
     val redeemFor: String? = null,
     val showRedeem: Boolean = false,
@@ -70,7 +69,7 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
     val settings = StoreSettings(application)
     private val catalog = Catalog(application, settings)
 
-    private val _state = MutableStateFlow(UiState(serverConfigured = settings.isServerConfigured))
+    private val _state = MutableStateFlow(UiState())
     val state: StateFlow<UiState> = _state
 
     private var apps: List<StoreApp> = emptyList()
@@ -79,7 +78,6 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch { InstallEvents.events.collect(::onInstallEvent) }
-        if (!settings.isServerConfigured) navigate(Screen.Settings)
         refresh()
     }
 
@@ -87,12 +85,8 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
 
     fun refresh() {
         loadJob?.cancel()
-        if (!settings.isServerConfigured) {
-            _state.update { it.copy(serverConfigured = false, loadedOnce = true, error = "Keine Server-Adresse eingestellt") }
-            return
-        }
         loadJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null, serverConfigured = true) }
+            _state.update { it.copy(loading = true, error = null) }
             try {
                 val result = catalog.load()
                 apps = result.apps
@@ -270,19 +264,9 @@ class StoreViewModel(application: Application) : AndroidViewModel(application) {
         context.startActivity(intent)
     }
 
-    fun saveSettings(server: String, updateCheck: Boolean) {
-        val newUrl = StoreSettings.normalizeUrl(server)
-        if (newUrl != settings.serverUrl) {
-            // Anderer Server -> alte Anmeldung gilt dort nicht
-            settings.sessionToken = ""
-            _state.update { it.copy(user = null) }
-        }
-        settings.serverUrl = newUrl
-        settings.updateCheckEnabled = updateCheck
-        UpdateCheckWorker.schedule(context, updateCheck)
-        navigate(Screen.Home)
-        toast("Einstellungen gespeichert")
-        refresh()
+    fun setUpdateCheck(enabled: Boolean) {
+        settings.updateCheckEnabled = enabled
+        UpdateCheckWorker.schedule(context, enabled)
     }
 
     private fun onInstallEvent(event: InstallEvent) {

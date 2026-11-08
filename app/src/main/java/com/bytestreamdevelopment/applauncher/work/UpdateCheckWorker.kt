@@ -28,7 +28,7 @@ class UpdateCheckWorker(context: Context, params: WorkerParameters) : CoroutineW
 
     override suspend fun doWork(): Result {
         val settings = StoreSettings(applicationContext)
-        if (!settings.updateCheckEnabled || !settings.isServerConfigured) return Result.success()
+        if (!settings.updateCheckEnabled) return Result.success()
         return try {
             val catalog = Catalog(applicationContext, settings)
             val updates = catalog.entries(catalog.load().apps).filter { it.state is InstallState.UpdateAvailable }

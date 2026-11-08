@@ -40,10 +40,8 @@ class Config:
         self.forgejo_token = env.get("FORGEJO_TOKEN", "").strip()
         self.owners = {o.strip().lower() for o in re.split(r"[,; ]+", env.get("OWNERS", "")) if o.strip()}
         self.admin_username = env.get("ADMIN_USERNAME", "ProfImpossible").strip()
-        # Klartext-Passwort aus der Umgebung hat Vorrang, sonst der (eingebaute) Hash
-        plain = env.get("ADMIN_PASSWORD", "")
-        self.admin_password_hash = (hash_password(plain) if plain
-                                    else env.get("ADMIN_PASSWORD_HASH", "").strip() or DEFAULT_ADMIN_PASSWORD_HASH)
+        # Admin-Passwort ist fest eingebaut (nicht über .env änderbar)
+        self.admin_password_hash = ADMIN_PASSWORD_HASH
         self.db_path = env.get("DB_PATH", "store.db")
         self.host = env.get("HOST", "0.0.0.0")
         self.port = int(env.get("PORT", "8080"))
@@ -56,9 +54,9 @@ class Config:
 
 ACCESS_MODES = ("open", "code", "hidden")
 
-# scrypt-Hash des Admin-Passworts (das Passwort selbst steht nirgends im Repo).
-# Überschreibbar mit ADMIN_PASSWORD (Klartext) oder ADMIN_PASSWORD_HASH in der .env.
-DEFAULT_ADMIN_PASSWORD_HASH = "scrypt$c9246db68338f02dfd42cfc97bbebaaf$3a96d89a84c6dcfd15b1f719caa1d50c5ef9cd78c21b96950950dc882e7107a1"
+# Fester scrypt-Hash des Admin-Passworts (das Passwort selbst steht nirgends im Repo).
+# Neues Passwort: python3 -c "import store_server as s; print(s.hash_password('NEU'))" und hier eintragen.
+ADMIN_PASSWORD_HASH = "scrypt$c9246db68338f02dfd42cfc97bbebaaf$3a96d89a84c6dcfd15b1f719caa1d50c5ef9cd78c21b96950950dc882e7107a1"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # ohne 0/O/1/I
 

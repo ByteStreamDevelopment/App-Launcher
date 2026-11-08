@@ -42,12 +42,16 @@ Liegt in [`server/`](server/), nur Python-Standardbibliothek + SQLite, am einfac
 
 ```bash
 cd server
-cp .env.example .env      # FORGEJO_TOKEN eintragen (Admin-Passwort ist schon eingebaut)
+cp .env.example .env      # nur FORGEJO_TOKEN eintragen
 docker compose up -d --build
 ```
 
-Der Server läuft dann auf Port `8080`. Am besten hinter deinen bestehenden Reverse-Proxy hängen
-(z. B. `https://store.nebendahl.eu` → `http://localhost:8080`) und in `.env` `TRUST_PROXY=1` setzen.
+Der Server läuft dann auf Port `8080`. Die App erwartet ihn fest unter **`https://apps.nebendahl.eu`** –
+also im Reverse-Proxy `apps.nebendahl.eu` → `http://localhost:8080` eintragen und in `.env` `TRUST_PROXY=1` setzen.
+
+Das **Admin-Passwort ist fest im Server eingebaut** (nur als scrypt-Hash `ADMIN_PASSWORD_HASH` in `store_server.py`)
+und steht nicht in der `.env`. Ändern: neuen Hash erzeugen
+(`python3 -c "import store_server as s; print(s.hash_password('NEU'))"`) und dort eintragen.
 Die Datenbank liegt in `server/data/store.db` (Backup = diese Datei kopieren).
 
 | Variable | Bedeutung |
@@ -55,7 +59,6 @@ Die Datenbank liegt in `server/data/store.db` (Backup = diese Datei kopieren).
 | `FORGEJO_URL` | Forgejo-Adresse, Standard `https://git.nebendahl.eu` |
 | `FORGEJO_TOKEN` | Token mit `read:repository` – nötig für private Repos |
 | `ADMIN_USERNAME` | Haupt-Admin, Standard `ProfImpossible` |
-| `ADMIN_PASSWORD` / `ADMIN_PASSWORD_HASH` | optional: anderes Admin-Passwort. Ohne Angabe gilt das eingebaute (als scrypt-Hash in `store_server.py`) |
 | `OWNERS` | optional: nur Repos dieser Benutzer/Orgs (kommagetrennt) |
 | `DEFAULT_ACCESS` | Freigabe neu entdeckter Apps: `open`, `code` oder `hidden` |
 | `TRUST_PROXY` | `1` hinter Reverse-Proxy (echte IP für die Fehlversuch-Bremse) |
@@ -66,7 +69,7 @@ Tests: `python3 -m unittest discover -s server/tests`
 
 ### Erste Schritte nach dem Start
 
-1. App installieren, in den Einstellungen die Server-Adresse eintragen.
+1. App installieren (die Server-Adresse ist schon eingebaut).
 2. Konto → **Registrieren** mit Benutzername `ProfImpossible`, eigenem Passwort und dem **Admin-Passwort**.
 3. Oben erscheint das Werkzeug-Symbol → Admin-Bereich.
 
@@ -128,8 +131,6 @@ keyPassword=...
 
 Version beim Bauen setzen: `./gradlew assembleRelease -PappVersionName=1.1.0 -PappVersionCode=2`
 
-Server-Adresse fest einbauen (spart das Eintippen): `./gradlew assembleRelease -PstoreServerUrl=https://store.nebendahl.eu`
-
 ### Der Store aktualisiert sich selbst
 
 Lege für den Store selbst ein Repo auf deinem Forgejo an und veröffentliche seine APK als Release –
@@ -143,7 +144,7 @@ dann taucht er in seiner eigenen Liste auf und kann sich selbst aktualisieren.
 | `data/StoreApi.kt` | Client für den Store-Server |
 | `data/Catalog.kt` | Katalog laden, APK auswählen, Installationsstatus bestimmen |
 | `data/Versions.kt` | Versionsvergleich Tag ↔ installierte Version |
-| `data/StoreSettings.kt` | Server-Adresse, Sitzung, Zuordnung Repo → Paketname |
+| `data/StoreSettings.kt` | feste Server-Adresse (`SERVER_URL`), Sitzung, Zuordnung Repo → Paketname |
 | `install/ApkInstaller.kt` | Download mit Fortschritt, Installation per `PackageInstaller` |
 | `install/InstallResultReceiver.kt` | Ergebnis der Installation / Bestätigungsdialog |
 | `work/UpdateCheckWorker.kt` | Hintergrund-Prüfung + Benachrichtigung |

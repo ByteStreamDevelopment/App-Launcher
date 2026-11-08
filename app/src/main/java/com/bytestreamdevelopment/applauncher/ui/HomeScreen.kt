@@ -89,15 +89,6 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
             ) {
                 when {
                     !state.loadedOnce -> Centered { CircularProgressIndicator() }
-                    !state.serverConfigured -> Centered {
-                        Text("Willkommen!", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Trage zuerst die Adresse deines Store-Servers ein.",
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(8.dp),
-                        )
-                        Button(onClick = { vm.navigate(Screen.Settings) }) { Text("Einstellungen öffnen") }
-                    }
                     state.error != null && state.entries.isEmpty() -> Centered {
                         Text("Katalog konnte nicht geladen werden", style = MaterialTheme.typography.titleMedium)
                         Text(state.error, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
