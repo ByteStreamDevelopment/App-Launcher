@@ -1881,6 +1881,12 @@ HTML_HEADERS = {
 }
 
 
+FAVICON_SVG = (b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" '
+               b'fill="#3D5AFE"/><rect x="14" y="22" width="36" height="28" rx="8" fill="#fff"/><circle cx="25" cy="35" '
+               b'r="4" fill="#3D5AFE"/><circle cx="39" cy="35" r="4" fill="#3D5AFE"/><path d="M24 22l-4-8M40 22l4-8" '
+               b'stroke="#fff" stroke-width="3" stroke-linecap="round"/></svg>')
+
+
 class Handler(BaseHTTPRequestHandler):
     store: Store = None  # wird in make_server gesetzt
     protocol_version = "HTTP/1.1"
@@ -1911,8 +1917,28 @@ class Handler(BaseHTTPRequestHandler):
         return length
 
     def raw_body(self, limit=1024 * 1024) -> bytes:
-        length = self.content_length(limit)
-        return self.rfile.read(length) if length else b""
+        length = min(self.content_length(limit), self._body_left)
+        data = self.rfile.read(length) if length else b""
+        self._body_left -= len(data)
+        return data
+
+    def discard_body(self):
+        """Nicht gelesenen Request-Body verwerfen. Sonst landet er bei Keep-Alive-Verbindungen (z. B. über Caddy)
+        vor der nächsten Anfrage und macht sie kaputt."""
+        left, self._body_left = self._body_left, 0
+        if left <= 0 or self.close_connection:
+            return
+        if left > 1024 * 1024:  # z. B. abgelehnter Upload: nicht alles lesen, Verbindung schließen
+            self.close_connection = True
+            return
+        try:
+            while left > 0:
+                chunk = self.rfile.read(min(left, 64 * 1024))
+                if not chunk:
+                    break
+                left -= len(chunk)
+        except OSError:
+            self.close_connection = True
 
     def body(self) -> dict:
         raw = self.raw_body(64 * 1024)
@@ -1951,6 +1977,13 @@ class Handler(BaseHTTPRequestHandler):
         split = urllib.parse.urlsplit(self.path)
         path, query = split.path, dict(urllib.parse.parse_qsl(split.query))
         try:
+            self._body_left = max(0, int(self.headers.get("Content-Length") or 0))
+        except ValueError:
+            self._body_left = 0
+            self.close_connection = True
+        if self.headers.get("Transfer-Encoding"):  # chunked wird nicht unterstützt
+            self.close_connection = True
+        try:
             for m, regex, auth, fn in ROUTES:
                 match = regex.match(path)
                 if not match or m != method:
@@ -1980,6 +2013,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json(500, {"error": "Interner Serverfehler"})
             except Exception:
                 pass
+        finally:
+            self.discard_body()
 
     def do_GET(self):
         self.handle_any("GET")
@@ -2031,6 +2066,15 @@ class Handler(BaseHTTPRequestHandler):
     @route("GET", "/")
     def w_index(self, **_):
         self.send_html(legal.landing(self.store.config))
+
+    @route("GET", "/robots.txt")
+    def w_robots(self, **_):
+        self.send_bytes(200, b"User-agent: *\nDisallow: /api/\nDisallow: /portal\nDisallow: /reset\nDisallow: /verify\n",
+                        "text/plain; charset=utf-8", {"Cache-Control": "public, max-age=86400"})
+
+    @route("GET", "/favicon.ico")
+    def w_favicon(self, **_):
+        self.send_bytes(200, FAVICON_SVG, "image/svg+xml", {"Cache-Control": "public, max-age=604800"})
 
     @route("GET", "/impressum")
     def w_impressum(self, **_):
@@ -2268,6 +2312,7 @@ class Handler(BaseHTTPRequestHandler):
                     out.write(chunk)
                     digest.update(chunk)
                     left -= len(chunk)
+                    self._body_left -= len(chunk)
             notes = query.get("notes") or urllib.parse.unquote(self.headers.get("X-Release-Notes", ""))
             return self.store.add_release(user, aid, tmp, length, digest.hexdigest(), query.get("version", ""),
                                           query.get("channel", "stable"), notes)
