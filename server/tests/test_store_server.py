@@ -562,6 +562,17 @@ class DeveloperTest(ServerTestCase):
                                                         "source_url": "https://github.com/anna/gibtsnicht"}, self.dev)
         self.assertEqual(status, 404, r)
 
+    def test_server_token_nicht_fuer_entwickler_quellen(self):
+        self.config.forgejo_token = "server-geheim"
+        self.call("POST", "/api/dev/apps", {"slug": "fremd", "name": "Fremd",
+                                            "source_url": f"{FORGEJO}/Mrcoolgamer11/Geheim"}, self.dev)
+        dev_calls = [h for url, h in self.remote.calls if "Geheim" in url and h.get("Authorization")]
+        self.store.sources.last_discovery = 0
+        self.apps()
+        auto_calls = [h for url, h in self.remote.calls if "repos/search" in url]
+        self.assertEqual(dev_calls, [])  # kein Server-Token bei Entwickler-Quellen
+        self.assertEqual(auto_calls[-1]["Authorization"], "token server-geheim")  # aber beim Import
+
     def test_ssrf_schutz(self):
         self.config.allow_private_sources = False
         status, r = self.call("POST", "/api/dev/apps", {"slug": "boese", "name": "Böse",

@@ -374,7 +374,10 @@ class Sources:
 
     # --- HTTP ---------------------------------------------------------------
 
-    def headers_for(self, base_url: str, token: str = "", github: bool = False) -> dict:
+    def headers_for(self, base_url: str, token: str = "", github: bool = False, server_token: bool = False) -> dict:
+        """server_token: den Forgejo-Token des Servers verwenden – NUR für den automatischen Import.
+        Quellen von Entwicklern nutzen ausschließlich deren eigenen Token, sonst könnten sie fremde private
+        Repos veröffentlichen."""
         h = {"Accept": "application/vnd.github+json" if github else "application/json",
              "User-Agent": "ByteDroide-Server"}
         if github:
@@ -382,7 +385,8 @@ class Sources:
             if token:
                 h["Authorization"] = f"Bearer {token}"
         else:
-            token = token or (self.config.forgejo_token if _same_host(base_url, self.config.forgejo_url) else "")
+            if not token and server_token and _same_host(base_url, self.config.forgejo_url):
+                token = self.config.forgejo_token
             if token:
                 h["Authorization"] = f"token {token}"
         return h
@@ -427,7 +431,7 @@ class Sources:
             url = f"https://api.github.com/repos/{q(owner)}/{q(name)}/releases?per_page=15"
         else:
             url = f"{base}/api/v1/repos/{q(owner)}/{q(name)}/releases?limit=15"
-        headers = self.headers_for(base, token, github)
+        headers = self.headers_for(base, token, github, server_token=source_type == "forgejo_auto")
         data = self._fetch(url, headers)
         if data is None:
             raise HttpError(404, f"Repository {repo} nicht gefunden (privat? dann Token angeben)")
@@ -491,7 +495,7 @@ class Sources:
     def discover(self) -> list:
         """Forgejo-Repos (für den automatischen Import)."""
         repos, page = [], 1
-        headers = self.headers_for(self.config.forgejo_url)
+        headers = self.headers_for(self.config.forgejo_url, server_token=True)
         while page <= 20:
             body = self._fetch(f"{self.config.forgejo_url}/api/v1/repos/search?limit=50&page={page}", headers) or {}
             data = body.get("data") or []
@@ -1455,7 +1459,8 @@ class Store:
                 raise HttpError(409, f"Version {version} gibt es in diesem Kanal schon")
             rel_path = os.path.join("apks", f"{row['key'].replace('/', '_')}-{sha256[:12]}.apk")
             os.replace(tmp_path, os.path.join(self.config.data_dir, rel_path))
-            file_name = f"{row['key'].split('/')[1]}-{normalize_version(version)}{'-beta' if channel == 'beta' else ''}.apk"
+            suffix = "-beta" if channel == "beta" and "beta" not in version.lower() else ""
+            file_name = f"{row['key'].split('/')[1]}-{normalize_version(version)}{suffix}.apk"
             cur = conn.execute(
                 "INSERT INTO releases (app_key, version, version_code, notes, channel, file_name, size, sha256, path, "
                 "created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
