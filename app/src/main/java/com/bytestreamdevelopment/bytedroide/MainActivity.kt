@@ -41,6 +41,8 @@ import com.bytestreamdevelopment.bytedroide.ui.DevCreateScreen
 import com.bytestreamdevelopment.bytedroide.ui.DevScreen
 import com.bytestreamdevelopment.bytedroide.ui.DevViewModel
 import com.bytestreamdevelopment.bytedroide.ui.HomeScreen
+import com.bytestreamdevelopment.bytedroide.ui.MessagesScreen
+import com.bytestreamdevelopment.bytedroide.ui.ThreadScreen
 import com.bytestreamdevelopment.bytedroide.ui.PurchasesScreen
 import com.bytestreamdevelopment.bytedroide.ui.Screen
 import com.bytestreamdevelopment.bytedroide.ui.SettingsScreen
@@ -89,7 +91,7 @@ class MainActivity : ComponentActivity() {
                     Screen.Admin -> if (user?.isAdmin == true) s else Screen.Home
                     Screen.Dev, Screen.DevCreate, is Screen.DevApp, is Screen.Codes ->
                         if (user?.isDeveloper == true) s else Screen.Home
-                    Screen.Purchases -> if (user != null) s else Screen.Account
+                    Screen.Purchases, Screen.Messages, is Screen.Thread -> if (user != null) s else Screen.Account
                     else -> s
                 }
                 when (screen) {
@@ -109,6 +111,8 @@ class MainActivity : ComponentActivity() {
                     Screen.DevCreate -> DevCreateScreen(user, dev, vm, snackbar)
                     is Screen.DevApp -> DevAppScreen(screen.fullName, user, dev, vm, snackbar)
                     is Screen.Codes -> CodesScreen(screen.fullName, dev, vm, snackbar)
+                    Screen.Messages -> MessagesScreen(state, vm, snackbar)
+                    is Screen.Thread -> ThreadScreen(screen.id, state, vm, snackbar)
                 }
 
                 if (state.showRedeem) RedeemDialog(state, vm)

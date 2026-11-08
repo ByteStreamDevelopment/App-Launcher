@@ -8,7 +8,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class CatalogResult(val apps: List<StoreApp>, val user: UserInfo?)
+data class CatalogResult(val apps: List<StoreApp>, val user: UserInfo?, val unreadMessages: Int = 0)
 
 /** Lädt den App-Katalog vom Store-Server und ermittelt den Installationsstatus. */
 class Catalog(private val context: Context, private val settings: StoreSettings) {
@@ -16,10 +16,10 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
     fun api() = StoreApi(settings.serverUrl, settings.sessionToken.ifBlank { null }, settings.installId)
 
     suspend fun load(): CatalogResult = withContext(Dispatchers.IO) {
-        val (raw, user) = api().apps()
+        val (raw, user, unread) = api().apps()
         // Token vorhanden, aber Server kennt ihn nicht mehr -> Sitzung abgelaufen
         if (user == null && settings.sessionToken.isNotBlank()) settings.sessionToken = ""
-        CatalogResult(raw.mapNotNull { parseApp(it, Build.SUPPORTED_ABIS) }, user)
+        CatalogResult(raw.mapNotNull { parseApp(it, Build.SUPPORTED_ABIS) }, user, unread)
     }
 
     fun entries(apps: List<StoreApp>): List<AppEntry> = apps.map { entry(it) }

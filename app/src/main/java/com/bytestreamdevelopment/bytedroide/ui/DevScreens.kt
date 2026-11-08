@@ -20,6 +20,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -373,19 +376,28 @@ fun DevAppScreen(fullName: String, me: UserInfo?, dev: DevViewModel, vm: StoreVi
                             Text("Hinzufügen")
                         }
                     }
-                    if (app.screenshots.isEmpty()) Hint("Screenshots erscheinen auf der App-Seite in ByteDroide und im Web-Store.")
+                    Hint(if (app.screenshots.isEmpty()) "Screenshots erscheinen auf der App-Seite in ByteDroide und im Web-Store."
+                    else "Mit den Pfeilen sortieren – der erste Screenshot ist der wichtigste.")
                     androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(app.screenshots, key = { it.id }) { shot ->
-                            Box {
+                        itemsIndexed(app.screenshots, key = { _, s -> s.id }) { index, shot ->
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 coil.compose.AsyncImage(
                                     model = shot.url,
-                                    contentDescription = null,
+                                    contentDescription = "Screenshot ${index + 1}",
                                     modifier = Modifier.height(160.dp).clip(RoundedCornerShape(10.dp)),
                                 )
-                                IconButton(
-                                    onClick = { dev.deleteScreenshot(fullName, shot.id) },
-                                    modifier = Modifier.align(Alignment.TopEnd),
-                                ) { Icon(Icons.Default.Delete, "Screenshot löschen") }
+                                Row {
+                                    IconButton(onClick = { dev.moveScreenshot(fullName, index, -1) }, enabled = index > 0) {
+                                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, "Nach vorne")
+                                    }
+                                    IconButton(onClick = { dev.deleteScreenshot(fullName, shot.id) }) {
+                                        Icon(Icons.Default.Delete, "Screenshot löschen")
+                                    }
+                                    IconButton(
+                                        onClick = { dev.moveScreenshot(fullName, index, 1) },
+                                        enabled = index < app.screenshots.size - 1,
+                                    ) { Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, "Nach hinten") }
+                                }
                             }
                         }
                     }

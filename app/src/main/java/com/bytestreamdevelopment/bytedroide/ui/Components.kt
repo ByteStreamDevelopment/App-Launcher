@@ -216,8 +216,8 @@ fun SectionTitle(text: String) {
 }
 
 @Composable
-fun Hint(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant) {
-    Text(text, style = MaterialTheme.typography.bodySmall, color = color)
+fun Hint(text: String, color: Color = MaterialTheme.colorScheme.onSurfaceVariant, modifier: Modifier = Modifier) {
+    Text(text, style = MaterialTheme.typography.bodySmall, color = color, modifier = modifier)
 }
 
 @Composable

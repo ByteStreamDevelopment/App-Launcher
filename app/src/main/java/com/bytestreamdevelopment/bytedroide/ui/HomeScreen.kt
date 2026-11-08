@@ -64,7 +64,13 @@ fun HomeScreen(state: UiState, vm: StoreViewModel, snackbar: SnackbarHostState) 
                         IconButton(onClick = { vm.navigate(Screen.Dev) }) { Icon(Icons.Default.Create, "Entwickler-Bereich") }
                     }
                     IconButton(onClick = { vm.navigate(Screen.Account) }) {
-                        Icon(if (state.user != null) Icons.Default.AccountCircle else Icons.Default.Person, "Konto")
+                        if (state.unreadMessages > 0) {
+                            BadgedBox(badge = { Badge { Text("${state.unreadMessages}") } }) {
+                                Icon(Icons.Default.AccountCircle, "Konto, ${state.unreadMessages} neue Nachrichten")
+                            }
+                        } else {
+                            Icon(if (state.user != null) Icons.Default.AccountCircle else Icons.Default.Person, "Konto")
+                        }
                     }
                     IconButton(onClick = vm::refresh) { Icon(Icons.Default.Refresh, "Aktualisieren") }
                     IconButton(onClick = { vm.navigate(Screen.Settings) }) {

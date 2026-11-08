@@ -70,7 +70,8 @@ def impressum(config) -> str:
     body = f"""
 <section><h2>Angaben gemäß § 5 DDG</h2>
 <p>{op.name}<br>{op.street}<br>{op.city}<br>{op.country if op.has('country') else 'Deutschland'}</p></section>
-<section><h2>Kontakt</h2><p>{phone}E-Mail: {op.email}</p></section>
+<section><h2>Kontakt</h2><p>{phone}E-Mail: {op.email}<br>
+Kontaktformular: <a href="{html.escape(config.public_url)}/kontakt">{html.escape(config.public_url)}/kontakt</a></p></section>
 {vat}
 <section><h2>Verantwortlich für den Inhalt nach § 18 Abs. 2 MStV</h2>
 <p>{responsible}<br>{op.street}<br>{op.city}</p></section>
@@ -84,8 +85,8 @@ fremde Inhalte. Für diese sind wir nach §§ 7 ff. DDG bzw. Art. 6 der Verordnu
 erst ab Kenntnis einer konkreten Rechtsverletzung verantwortlich. Bei Bekanntwerden entfernen wir solche Inhalte
 umgehend.</p>
 <h3>Rechtswidrige Inhalte melden</h3>
-<p>Hinweise auf rechtswidrige Inhalte oder Apps (z. B. Schadsoftware, Urheberrechtsverletzungen) bitte per E-Mail an
-{op.email} mit genauer Bezeichnung der App, einer Begründung und Ihren Kontaktdaten. Diese Adresse ist zugleich die
+<p>Hinweise auf rechtswidrige Inhalte oder Apps (z. B. Schadsoftware, Urheberrechtsverletzungen) bitte über das
+<a href="{html.escape(config.public_url)}/kontakt?thema=meldung">Kontaktformular</a> oder per E-Mail an {op.email} mit genauer Bezeichnung der App, einer Begründung und Ihren Kontaktdaten. Diese Adresse ist zugleich die
 zentrale Kontaktstelle nach Art. 11 und 12 DSA. Kommunikation ist auf Deutsch oder Englisch möglich.</p></section>
 <section><h2>Haftung für Links</h2>
 <p>Unser Angebot enthält Links zu externen Websites Dritter (z. B. Quell-Repositories auf GitHub oder Forgejo), auf
@@ -159,7 +160,16 @@ Konto-Einstellungen eingeschaltet haben (Art. 6 Abs. 1 lit. a DSGVO); das könne
 ausschalten. Für den Versand nutzen wir einen E-Mail-Server{(' von ' + op.mail_provider) if op.has('mail_provider') else ''}.
 </p></section>
 {payments}
-<section><h2>{'8' if payments else '7'}. Entwickler-Funktionen und Dritte</h2>
+<section><h2>{'8' if payments else '7'}. Bewertungen, Nachrichten und Kontaktformular</h2>
+<p><strong>Bewertungen</strong> (Sterne, Text, Version) sind mit deinem Benutzernamen öffentlich sichtbar, bis du sie
+löschst. <strong>Nachrichten an Entwickler</strong> (Betreff, Text, freiwillige Geräteangaben) sehen nur du und die
+Entwickler der jeweiligen App; bei Apps ohne Entwickler die Admins. Sie werden gespeichert, bis das Konto gelöscht
+wird. Rechtsgrundlage ist Art. 6 Abs. 1 lit. b DSGVO.</p>
+<p>Über das <strong>Kontaktformular</strong> übermittelst du Name, E-Mail-Adresse, Thema und Nachricht. Wir verwenden sie
+nur zur Bearbeitung deiner Anfrage (Art. 6 Abs. 1 lit. b bzw. f DSGVO) und löschen sie, wenn sie erledigt ist und keine
+Aufbewahrungspflichten bestehen, spätestens nach 2 Jahren.</p></section>
+
+<section><h2>{'9' if payments else '8'}. Entwickler-Funktionen und Dritte</h2>
 <p>Entwicklerinnen und Entwickler sehen für ihre eigenen Apps: Download- und Verkaufszahlen (zusammengefasst), die
 Benutzernamen ihrer Beta-Tester sowie den Benutzernamen, wer einen ihrer Freischalt-Codes eingelöst hat.
 Gibt eine Entwicklerin oder ein Entwickler als Quelle ein Repository (z. B. GitHub oder Forgejo) an, ruft
@@ -168,19 +178,20 @@ verbindet sich dabei nicht mit diesen Diensten, es werden keine Daten über Sie 
 <p>App-Icons können von dem jeweiligen Quell-Server geladen werden; dabei wird Ihre IP-Adresse an diesen Server
 übermittelt.</p></section>
 
-<section><h2>{'9' if payments else '8'}. Daten in der App und im Browser</h2>
+<section><h2>{'10' if payments else '9'}. Daten in der App und im Browser</h2>
 <p>Die App speichert auf Ihrem Gerät nur Ihr Anmelde-Token, Ihre Einstellungen und die Zuordnung, welche installierte App
 zu welchem Store-Eintrag gehört. Für die Erkennung von Updates liest die App die Versionen der über ByteDroide
 installierten Apps auf Ihrem Gerät aus; diese Information verlässt Ihr Gerät nicht. Das Entwickler-Portal im Browser
 speichert Ihr Anmelde-Token im lokalen Speicher des Browsers (technisch erforderlich, § 25 Abs. 2 Nr. 2 TDDDG).
 Cookies werden nicht gesetzt.</p></section>
 
-<section><h2>{'10' if payments else '9'}. Ihre Rechte</h2>
+<section><h2>{'11' if payments else '10'}. Ihre Rechte</h2>
 <p>Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der
 Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch gegen Verarbeitungen auf Grundlage von
 Art. 6 Abs. 1 lit. f DSGVO (Art. 21). Eine erteilte Einwilligung können Sie jederzeit mit Wirkung für die Zukunft
 widerrufen. Eine Kopie Ihrer Daten erhalten Sie in der App unter „Konto → Meine Daten exportieren“, löschen können Sie
-Ihr Konto unter „Konto → Konto löschen“. Für alles Weitere genügt eine E-Mail an {op.email}.</p>
+Ihr Konto unter „Konto → Konto löschen“ (in der App oder unter „Mein Konto“ im Browser). Für alles Weitere genügt eine
+E-Mail an {op.email}.</p>
 <p>Sie haben außerdem das Recht, sich bei einer Datenschutz-Aufsichtsbehörde zu beschweren, insbesondere in dem
 Bundesland Ihres Wohnorts oder des Sitzes des Verantwortlichen{(': ' + op.authority) if op.has('authority') else ''}.</p>
 <p>Eine automatisierte Entscheidungsfindung einschließlich Profiling findet nicht statt.</p></section>

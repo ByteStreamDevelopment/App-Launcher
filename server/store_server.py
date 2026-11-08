@@ -37,6 +37,7 @@ import mailer as mail
 import notify
 import qrcode_svg
 import scanner
+import docs
 import storefront
 
 log = logging.getLogger("store")
@@ -349,6 +350,40 @@ CREATE TABLE IF NOT EXISTS reviews (
     reply_at    INTEGER,
     PRIMARY KEY (app, user_id)
 );
+CREATE TABLE IF NOT EXISTS threads (
+    id          INTEGER PRIMARY KEY,
+    app         TEXT NOT NULL,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL DEFAULT 'feedback',
+    subject     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'open',
+    device      TEXT NOT NULL DEFAULT '',
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL,
+    user_read_id INTEGER NOT NULL DEFAULT 0,   -- zuletzt gelesene Nachricht (Nutzer)
+    dev_read_id INTEGER NOT NULL DEFAULT 0     -- zuletzt gelesene Nachricht (Entwickler)
+);
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY,
+    thread_id   INTEGER NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+    author_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    author_name TEXT NOT NULL,
+    from_dev    INTEGER NOT NULL,
+    body        TEXT NOT NULL,
+    created_at  INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS messages_thread ON messages(thread_id);
+CREATE TABLE IF NOT EXISTS contact_messages (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    email       TEXT NOT NULL,
+    topic       TEXT NOT NULL,
+    subject     TEXT NOT NULL,
+    body        TEXT NOT NULL,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    status      TEXT NOT NULL DEFAULT 'new',
+    created_at  INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS scans (
     app         TEXT NOT NULL,
     tag         TEXT NOT NULL,
@@ -633,6 +668,8 @@ class Store:
         self._scan_lock = threading.Lock()
         self.limiter = RateLimiter()
         self.signup_limiter = RateLimiter(max_failures=20, window=3600)
+        self.message_limiter = RateLimiter(max_failures=40, window=3600)
+        self.contact_limiter = RateLimiter(max_failures=5, window=3600)
         self._refresh_lock = threading.RLock()
         self._last_cleanup = 0.0
         os.makedirs(os.path.join(config.data_dir, "apks"), exist_ok=True)
@@ -969,6 +1006,8 @@ class Store:
                 "eigene_apps": q("SELECT id, name, description, created_at FROM apps WHERE developer_id = ?"),
                 "bewertungen": q("SELECT app, rating, text, version, created_at, updated_at FROM reviews "
                                  "WHERE user_id = ?"),
+                "nachrichten": q("SELECT t.app, t.subject, m.body, m.created_at FROM messages m "
+                                 "JOIN threads t ON t.id = m.thread_id WHERE m.author_id = ?"),
                 "api_schluessel": q("SELECT label, created_at, last_used FROM sessions "
                                     "WHERE user_id = ? AND label IS NOT NULL"),
             }
@@ -2008,6 +2047,21 @@ class Store:
 
     MAX_SCREENSHOTS = 8
 
+    def order_screenshots(self, user, app_id, order) -> dict:
+        row = self._require_manage(user, app_id)
+        try:
+            order = [int(i) for i in order]
+        except (TypeError, ValueError):
+            raise HttpError(400, "Reihenfolge: Liste der Screenshot-IDs erwartet")
+        with self.db.connect() as conn:
+            have = [r["id"] for r in conn.execute("SELECT id FROM screenshots WHERE app = ? ORDER BY position, id",
+                                                  (row["key"],))]
+            if sorted(order) != sorted(have):
+                raise HttpError(400, "Die Reihenfolge muss alle Screenshots der App genau einmal enthalten")
+            for pos, sid in enumerate(order):
+                conn.execute("UPDATE screenshots SET position = ? WHERE id = ?", (pos, sid))
+        return {"screenshots": self.list_screenshots(row)}
+
     def add_screenshot(self, user, app_id, data: bytes) -> dict:
         row = self._require_manage(user, app_id)
         ext = _image_ext(data)
@@ -2052,6 +2106,221 @@ class Store:
         if not shot:
             raise HttpError(404, "Screenshot nicht gefunden")
         return os.path.join(self.config.data_dir, shot["path"])
+
+    # --- Nachrichten zwischen Nutzern und Entwicklern ---------------------------------
+
+    THREAD_KINDS = {"bug": "Fehlermeldung", "feedback": "Feedback", "question": "Frage"}
+
+    def _thread_role(self, user, thread, app_row):
+        """'user' (hat das Gespräch begonnen), 'dev' (betreut die App) oder None."""
+        if not user:
+            return None
+        if thread["user_id"] == user["id"]:
+            return "user"
+        if app_row is not None and (app_row["developer_id"] == user["id"] or (
+                user["role"] == "admin" and app_row["developer_id"] is None)):
+            return "dev"
+        return None
+
+    def _app_or_none(self, conn, key):
+        return conn.execute("SELECT a.*, u.username AS developer FROM apps a LEFT JOIN users u ON u.id = a.developer_id "
+                            "WHERE a.key = ?", (key,)).fetchone()
+
+    def create_thread(self, user, app_id, kind, subject, body, device="") -> dict:
+        row, view = self.app_for(user, app_id)
+        if row["developer_id"] == user["id"]:
+            raise HttpError(400, "Das ist deine eigene App")
+        if kind not in self.THREAD_KINDS:
+            raise HttpError(400, "Art muss bug, feedback oder question sein")
+        subject, body = (subject or "").strip()[:120], (body or "").strip()[:5000]
+        if not subject or not body:
+            raise HttpError(400, "Bitte Betreff und Nachricht angeben")
+        self.message_limiter.check(f"u{user['id']}")
+        self.message_limiter.fail(f"u{user['id']}")
+        with self.db.connect() as conn:
+            cur = conn.execute("INSERT INTO threads (app, user_id, kind, subject, device, created_at, updated_at) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (row["key"], user["id"], kind, subject, (device or "").strip()[:500], now(), now()))
+            tid = cur.lastrowid
+            mid = conn.execute("INSERT INTO messages (thread_id, author_id, author_name, from_dev, body, created_at) "
+                               "VALUES (?, ?, ?, 0, ?, ?)", (tid, user["id"], user["username"], body, now())).lastrowid
+            conn.execute("UPDATE threads SET user_read_id = ? WHERE id = ?", (mid, tid))
+        self._notify_thread(tid, from_dev=False, body=body, new=True)
+        return self.thread(user, tid)
+
+    def threads(self, user) -> dict:
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                "SELECT t.*, a.id AS app_id, a.name AS app_name, a.developer_id, u.username AS starter, "
+                "(SELECT body FROM messages m WHERE m.thread_id = t.id ORDER BY m.id DESC LIMIT 1) AS last_body, "
+                "(SELECT from_dev FROM messages m WHERE m.thread_id = t.id ORDER BY m.id DESC LIMIT 1) AS last_dev, "
+                "(SELECT MAX(id) FROM messages m WHERE m.thread_id = t.id) AS last_id "
+                "FROM threads t LEFT JOIN apps a ON a.key = t.app JOIN users u ON u.id = t.user_id "
+                "WHERE t.user_id = ? OR a.developer_id = ? OR (? AND a.developer_id IS NULL) "
+                "ORDER BY t.updated_at DESC LIMIT 300",
+                (user["id"], user["id"], 1 if user["role"] == "admin" else 0)).fetchall()
+        result = []
+        for r in rows:
+            role = "user" if r["user_id"] == user["id"] else "dev"
+            read_id = r["user_read_id"] if role == "user" else r["dev_read_id"]
+            unread = (r["last_dev"] == 1) == (role == "user") and (r["last_id"] or 0) > read_id
+            result.append({"id": r["id"], "app": r["app_id"] or r["app"], "app_name": r["app_name"] or r["app"],
+                           "kind": r["kind"], "kind_label": self.THREAD_KINDS.get(r["kind"], r["kind"]),
+                           "subject": r["subject"], "status": r["status"], "role": role,
+                           "with": r["starter"] if role == "dev" else "Entwickler",
+                           "updated_at": r["updated_at"], "unread": unread,
+                           "preview": (r["last_body"] or "")[:140]})
+        return {"threads": result, "unread": sum(1 for t in result if t["unread"])}
+
+    def unread_count(self, user) -> int:
+        return self.threads(user)["unread"] if user else 0
+
+    def _load_thread(self, user, tid):
+        with self.db.connect() as conn:
+            t = conn.execute("SELECT * FROM threads WHERE id = ?", (tid,)).fetchone()
+            if not t:
+                raise HttpError(404, "Gespräch nicht gefunden")
+            app = self._app_or_none(conn, t["app"])
+        role = self._thread_role(user, t, app)
+        if not role:
+            raise HttpError(404, "Gespräch nicht gefunden")
+        return t, app, role
+
+    def thread(self, user, tid) -> dict:
+        t, app, role = self._load_thread(user, tid)
+        with self.db.connect() as conn:
+            msgs = conn.execute("SELECT * FROM messages WHERE thread_id = ? ORDER BY id", (tid,)).fetchall()
+            if msgs:
+                conn.execute(f"UPDATE threads SET {'user_read_id' if role == 'user' else 'dev_read_id'} = ? WHERE id = ?",
+                             (msgs[-1]["id"], tid))
+            starter = self._user(conn, t["user_id"])
+        return {
+            "id": t["id"], "app": app["id"] if app else t["app"], "app_name": app["name"] if app else t["app"],
+            "kind": t["kind"], "kind_label": self.THREAD_KINDS.get(t["kind"], t["kind"]), "subject": t["subject"],
+            "status": t["status"], "role": role, "device": t["device"],
+            "user": starter["username"] if starter else "–", "developer": (app["developer"] if app else None) or "Admin",
+            "created_at": t["created_at"],
+            "messages": [{"id": m["id"], "author": m["author_name"], "from_dev": bool(m["from_dev"]),
+                          "mine": m["author_id"] == user["id"], "body": m["body"], "created_at": m["created_at"]}
+                         for m in msgs],
+        }
+
+    def post_message(self, user, tid, body) -> dict:
+        t, app, role = self._load_thread(user, tid)
+        body = (body or "").strip()[:5000]
+        if not body:
+            raise HttpError(400, "Leere Nachricht")
+        self.message_limiter.check(f"u{user['id']}")
+        self.message_limiter.fail(f"u{user['id']}")
+        with self.db.connect() as conn:
+            mid = conn.execute("INSERT INTO messages (thread_id, author_id, author_name, from_dev, body, created_at) "
+                               "VALUES (?, ?, ?, ?, ?, ?)",
+                               (tid, user["id"], user["username"], int(role == "dev"), body, now())).lastrowid
+            conn.execute(f"UPDATE threads SET updated_at = ?, status = 'open', "
+                         f"{'user_read_id' if role == 'user' else 'dev_read_id'} = ? WHERE id = ?", (now(), mid, tid))
+        self._notify_thread(tid, from_dev=role == "dev", body=body)
+        return self.thread(user, tid)
+
+    def set_thread_status(self, user, tid, status) -> dict:
+        if status not in ("open", "closed"):
+            raise HttpError(400, "Status muss open oder closed sein")
+        self._load_thread(user, tid)
+        with self.db.connect() as conn:
+            conn.execute("UPDATE threads SET status = ? WHERE id = ?", (status, tid))
+        return self.thread(user, tid)
+
+    def _notify_thread(self, tid, from_dev, body, new=False):
+        with self.db.connect() as conn:
+            t = conn.execute("SELECT * FROM threads WHERE id = ?", (tid,)).fetchone()
+            app = self._app_or_none(conn, t["app"])
+            if from_dev:
+                recipients = [self._user(conn, t["user_id"])]
+            elif app and app["developer_id"]:
+                recipients = [self._user(conn, app["developer_id"])]
+            else:
+                recipients = conn.execute("SELECT * FROM users WHERE role = 'admin'").fetchall()
+            starter = self._user(conn, t["user_id"])
+        name = app["name"] if app else t["app"]
+        kind = self.THREAD_KINDS.get(t["kind"], "Nachricht")
+        excerpt = body if len(body) <= 600 else body[:600].rsplit(" ", 1)[0] + " …"
+        link = f"{self.config.public_url}/konto#/nachrichten/{tid}"
+        for r in recipients:
+            if not r:
+                continue
+            if from_dev:
+                subject, intro = f"Antwort zu {name}: {t['subject']}", f"Der Entwickler von {name} hat geantwortet:"
+            elif new:
+                subject = f"Neue {kind} zu {name}: {t['subject']}"
+                intro = f"{starter['username'] if starter else 'Ein Nutzer'} hat dir zu {name} geschrieben:"
+            else:
+                subject = f"Neue Nachricht zu {name}: {t['subject']}"
+                intro = f"{starter['username'] if starter else 'Ein Nutzer'} hat geantwortet:"
+            self._mail_user(r, subject, intro=intro, paragraphs=[excerpt],
+                            facts=[("Gerät", t["device"])] if (new and t["device"] and not from_dev) else (),
+                            button=("Gespräch öffnen", link),
+                            reason="Du erhältst diese E-Mail wegen einer Nachricht in ByteDroide.")
+
+    # --- Kontaktformular --------------------------------------------------------------
+
+    CONTACT_TOPICS = {"allgemein": "Allgemeine Frage", "support": "Hilfe zur App", "entwickler": "Entwickler & Apps",
+                      "datenschutz": "Datenschutz", "meldung": "Rechtswidrigen Inhalt melden", "presse": "Sonstiges"}
+
+    def contact(self, ip, user, b: dict) -> dict:
+        if (b.get("website") or "").strip():  # Honigtopf-Feld: von Bots ausgefüllt
+            return {"ok": True}
+        self.contact_limiter.check(ip)
+        name = (b.get("name") or "").strip()[:100]
+        email = self._check_email(b.get("email"))
+        topic = b.get("topic") if b.get("topic") in self.CONTACT_TOPICS else "allgemein"
+        subject = (b.get("subject") or "").strip()[:150]
+        body = (b.get("message") or "").strip()[:8000]
+        if not name or not subject or len(body) < 10:
+            raise HttpError(400, "Bitte Name, Betreff und eine Nachricht (mindestens 10 Zeichen) angeben")
+        if not b.get("privacy"):
+            raise HttpError(400, "Bitte der Verarbeitung gemäß Datenschutzerklärung zustimmen")
+        self.contact_limiter.fail(ip)
+        with self.db.connect() as conn:
+            cur = conn.execute("INSERT INTO contact_messages (name, email, topic, subject, body, user_id, created_at) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (name, email, topic, subject, body, user["id"] if user else None, now()))
+        facts = [("Von", f"{name} <{email}>"), ("Thema", self.CONTACT_TOPICS[topic]), ("Nr.", f"K-{cur.lastrowid:05d}")]
+        if user:
+            facts.append(("Konto", user["username"]))
+        notify = dict(intro=f"Neue Kontaktanfrage: {subject}", facts=facts, paragraphs=body.split("\n\n")[:20],
+                      reason="Du erhältst diese E-Mail als Betreiber/Admin von ByteDroide.")
+        if self.config.operator_email:
+            self._mail(self.config.operator_email, f"Kontakt: {subject}", **notify)
+        self._mail_admins(f"Kontakt: {subject}", **{k: v for k, v in notify.items() if k != "reason"})
+        self._mail(email, "Wir haben deine Nachricht erhalten",
+                   intro=f"Hallo {name}, danke für deine Nachricht! Wir melden uns so bald wie möglich.",
+                   facts=[("Nr.", f"K-{cur.lastrowid:05d}"), ("Betreff", subject)],
+                   paragraphs=["Deine Nachricht:", body[:2000]],
+                   reason="Du erhältst diese E-Mail, weil du das Kontaktformular von ByteDroide benutzt hast.")
+        return {"ok": True, "id": cur.lastrowid}
+
+    def contact_messages(self) -> list:
+        with self.db.connect() as conn:
+            rows = conn.execute("SELECT * FROM contact_messages ORDER BY status = 'done', created_at DESC "
+                                "LIMIT 300").fetchall()
+        return [{"id": r["id"], "name": r["name"], "email": r["email"], "topic": r["topic"],
+                 "topic_label": self.CONTACT_TOPICS.get(r["topic"], r["topic"]), "subject": r["subject"],
+                 "body": r["body"], "status": r["status"], "created_at": r["created_at"]} for r in rows]
+
+    def set_contact_status(self, cid, status) -> dict:
+        if status not in ("new", "done"):
+            raise HttpError(400, "Status muss new oder done sein")
+        with self.db.connect() as conn:
+            if not conn.execute("UPDATE contact_messages SET status = ? WHERE id = ?", (status, cid)).rowcount:
+                raise HttpError(404, "Nachricht nicht gefunden")
+        return {"ok": True}
+
+    def stats(self) -> dict:
+        """Öffentliche Kennzahlen für die Startseite."""
+        with self.db.connect() as conn:
+            one = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+            return {"developers": one("SELECT COUNT(*) FROM users WHERE role IN ('developer', 'admin')"),
+                    "downloads": one("SELECT COUNT(*) FROM downloads"),
+                    "reviews": one("SELECT COUNT(*) FROM reviews")}
 
     # --- Admin -----------------------------------------------------------------
 
@@ -2218,6 +2487,7 @@ class Store:
                 "review_releases": self.config.review_releases,
                 "scanner_enabled": self.scanner.enabled,
                 "push_enabled": self.pusher.enabled,
+                "contact_open": one("SELECT COUNT(*) FROM contact_messages WHERE status = 'new'"),
             }
 
     # --- Käufe (Stripe) ------------------------------------------------------------
@@ -2623,13 +2893,58 @@ class Handler(BaseHTTPRequestHandler):
     # --- Webseiten -------------------------------------------------------------
 
     @route("GET", "/")
-    def w_index(self, user, query, **_):
+    def w_index(self, **_):
         apps = self.store.list_apps(None, self.viewer(None))
-        self.send_html(storefront.catalog(self.store.config, apps, query.get("q", ""), query.get("kategorie", "")))
+        self.send_html(storefront.home(self.store.config, apps, self.store.stats()))
+
+    @route("GET", "/apps")
+    def w_apps(self, query, **_):
+        apps = self.store.list_apps(None, self.viewer(None))
+        self.send_html(storefront.catalog(self.store.config, apps, query.get("q", ""), query.get("kategorie", ""),
+                                          query.get("sortierung", "")))
+
+    @route("GET", "/hilfe")
+    def w_docs_index(self, **_):
+        self.send_html(docs.page(self.store.config, ""))
+
+    @route("GET", r"/hilfe/(?P<slug>[a-z0-9-]+)")
+    def w_docs(self, params, **_):
+        self.send_html(docs.page(self.store.config, params["slug"]))
+
+    @route("GET", "/kontakt")
+    def w_contact(self, query, **_):
+        self.send_html(storefront.contact_page(self.store.config, self.store.CONTACT_TOPICS,
+                                               topic=query.get("thema", "")))
+
+    @route("POST", "/kontakt")
+    def w_contact_send(self, **_):
+        f = self.form()
+        try:
+            self.store.contact(self.client_ip(), None, f)
+        except HttpError as e:
+            self.send_html(storefront.contact_page(self.store.config, self.store.CONTACT_TOPICS, form=f,
+                                                   error=e.message), e.status)
+            return
+        self.send_html(storefront.contact_page(self.store.config, self.store.CONTACT_TOPICS, sent=True))
+
+    @route("GET", "/konto")
+    def w_account(self, **_):
+        with open(os.path.join(HERE, "web", "app.html"), encoding="utf-8") as f:
+            self.send_html(f.read())
+
+    @route("GET", r"/static/(?P<name>[a-z0-9_-]+\.(?:js|css))")
+    def w_static(self, params, **_):
+        path = os.path.join(HERE, "web", params["name"])
+        if not os.path.isfile(path):
+            raise HttpError(404, "Nicht gefunden")
+        ctype = "text/javascript; charset=utf-8" if path.endswith(".js") else "text/css; charset=utf-8"
+        with open(path, "rb") as f:
+            self.send_bytes(200, f.read(), ctype, {"Cache-Control": "public, max-age=300",
+                                                    "X-Content-Type-Options": "nosniff"})
 
     @route("GET", "/robots.txt")
     def w_robots(self, **_):
-        self.send_bytes(200, b"User-agent: *\nDisallow: /api/\nDisallow: /portal\nDisallow: /reset\nDisallow: /verify\n",
+        self.send_bytes(200, b"User-agent: *\nDisallow: /api/\nDisallow: /konto\nDisallow: /portal\nDisallow: /reset\nDisallow: /verify\n",
                         "text/plain; charset=utf-8", {"Cache-Control": "public, max-age=86400"})
 
     @route("GET", "/favicon.ico")
@@ -2726,8 +3041,10 @@ class Handler(BaseHTTPRequestHandler):
 
     @route("GET", "/portal")
     def w_portal(self, **_):
-        with open(os.path.join(HERE, "web", "portal.html"), encoding="utf-8") as f:
-            self.send_html(f.read().replace("{{PUBLIC_URL}}", self.store.config.public_url))
+        self.send_response(302)
+        self.send_header("Location", "/konto#/entwickler")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     # --- API: allgemein & Konto -------------------------------------------------
 
@@ -2808,7 +3125,13 @@ class Handler(BaseHTTPRequestHandler):
     @route("GET", "/api/apps")
     def r_apps(self, user, **_):
         return {"apps": self.store.list_apps(user, self.viewer(user)),
-                "user": self.store.user_json(user) if user else None}
+                "user": self.store.user_json(user) if user else None,
+                "unread_messages": self.store.unread_count(user)}
+
+    @route("GET", f"/api/apps/{APP_ID}")
+    def r_app(self, user, params, **_):
+        _, view = self.store.app_for(user, app_id(params), self.viewer(user))
+        return view
 
     @route("GET", f"/api/apps/{APP_ID}/download")
     def r_download(self, user, params, query, **_):
@@ -3022,6 +3345,46 @@ class Handler(BaseHTTPRequestHandler):
     def r_admin_delete_review(self, user, params, **_):
         self.store.delete_review(user, app_id(params), int(params["uid"]))
         return {"ok": True}
+
+    @route("PUT", f"/api/dev/apps/{APP_ID}/screenshots", auth="developer")
+    def r_dev_order_shots(self, user, params, **_):
+        return self.store.order_screenshots(user, app_id(params), self.body().get("order") or [])
+
+    # Nachrichten
+    @route("POST", f"/api/apps/{APP_ID}/threads", auth="user")
+    def r_new_thread(self, user, params, **_):
+        b = self.body()
+        return self.store.create_thread(user, app_id(params), b.get("kind", "feedback"), b.get("subject", ""),
+                                        b.get("message", ""), b.get("device", ""))
+
+    @route("GET", "/api/threads", auth="user")
+    def r_threads(self, user, **_):
+        return self.store.threads(user)
+
+    @route("GET", r"/api/threads/(?P<tid>\d+)", auth="user")
+    def r_thread(self, user, params, **_):
+        return self.store.thread(user, int(params["tid"]))
+
+    @route("POST", r"/api/threads/(?P<tid>\d+)/messages", auth="user")
+    def r_post_message(self, user, params, **_):
+        return self.store.post_message(user, int(params["tid"]), self.body().get("message", ""))
+
+    @route("PUT", r"/api/threads/(?P<tid>\d+)", auth="user")
+    def r_thread_status(self, user, params, **_):
+        return self.store.set_thread_status(user, int(params["tid"]), self.body().get("status", ""))
+
+    # Kontakt
+    @route("POST", "/api/contact")
+    def r_contact(self, user, **_):
+        return self.store.contact(self.client_ip(), user, self.body())
+
+    @route("GET", "/api/admin/contact", auth="admin")
+    def r_admin_contact(self, **_):
+        return {"messages": self.store.contact_messages()}
+
+    @route("PUT", r"/api/admin/contact/(?P<cid>\d+)", auth="admin")
+    def r_admin_contact_status(self, params, **_):
+        return self.store.set_contact_status(int(params["cid"]), self.body().get("status", ""))
 
     @route("GET", "/api/admin/overview", auth="admin")
     def r_overview(self, **_):

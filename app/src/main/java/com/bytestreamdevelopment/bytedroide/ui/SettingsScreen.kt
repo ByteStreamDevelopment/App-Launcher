@@ -74,6 +74,14 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
             }
 
             HorizontalDivider()
+            Text("Hilfe & Kontakt", style = MaterialTheme.typography.titleMedium)
+            Column {
+                TextButton(onClick = { vm.openLegal("hilfe") }) { Text("Hilfe & Dokumentation") }
+                TextButton(onClick = { vm.openLegal("kontakt") }) { Text("Kontaktformular") }
+                TextButton(onClick = { vm.openLegal("") }) { Text("ByteDroide im Browser") }
+            }
+
+            HorizontalDivider()
             Text("Rechtliches", style = MaterialTheme.typography.titleMedium)
             Column {
                 TextButton(onClick = { vm.openLegal("impressum") }) { Text("Impressum") }
@@ -88,7 +96,7 @@ fun SettingsScreen(vm: StoreViewModel, snackbar: SnackbarHostState) {
                 "Eigene Apps veröffentlichen: Konto → „Entwickler werden“. Hochladen geht auch am PC im Entwickler-Portal.",
                 style = MaterialTheme.typography.bodyMedium,
             )
-            OutlinedButton(onClick = { vm.openLegal("portal") }, modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = { vm.openLegal("konto#/entwickler") }, modifier = Modifier.fillMaxWidth()) {
                 Text("Entwickler-Portal öffnen")
             }
 

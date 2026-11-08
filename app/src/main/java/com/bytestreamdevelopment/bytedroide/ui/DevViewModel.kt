@@ -153,6 +153,17 @@ class DevViewModel(application: Application) : AndroidViewModel(application) {
         onCatalogChanged()
     }
 
+    /** Verschiebt einen Screenshot um [delta] Positionen (-1 = nach vorne). */
+    fun moveScreenshot(fullName: String, index: Int, delta: Int) = run {
+        val ids = _state.value.current?.screenshots?.map { it.id }?.toMutableList() ?: return@run
+        val target = index + delta
+        if (target !in ids.indices) return@run
+        ids.add(target, ids.removeAt(index))
+        api().orderScreenshots(fullName, ids)
+        reload(fullName)
+        onCatalogChanged()
+    }
+
     fun deleteScreenshot(fullName: String, id: Long) = run {
         api().deleteScreenshot(fullName, id)
         reload(fullName)

@@ -16,10 +16,11 @@ class StoreApi(baseUrl: String, private val token: String?, private val installI
 
     // --- Katalog & Konto ---------------------------------------------------
 
-    /** Apps + angemeldeter Benutzer (null = nicht angemeldet / Sitzung abgelaufen). */
-    fun apps(): Pair<List<JSONObject>, UserInfo?> {
+    /** Apps + angemeldeter Benutzer (null = nicht angemeldet / Sitzung abgelaufen) + ungelesene Nachrichten. */
+    fun apps(): Triple<List<JSONObject>, UserInfo?, Int> {
         val body = request("GET", "/api/apps")
-        return body.getJSONArray("apps").objects() to body.optJSONObject("user")?.let(::parseUser)
+        return Triple(body.getJSONArray("apps").objects(), body.optJSONObject("user")?.let(::parseUser),
+            body.optInt("unread_messages"))
     }
 
     fun login(username: String, password: String): Pair<String, UserInfo> =
@@ -120,6 +121,45 @@ class StoreApi(baseUrl: String, private val token: String?, private val installI
         request("DELETE", "/api/admin/apps/${appPath(fullName)}/reviews/$userId")
     }
 
+    // --- Nachrichten --------------------------------------------------------
+
+    /** Gespräche + Anzahl ungelesener. */
+    fun threads(): Pair<List<ThreadSummary>, Int> {
+        val body = request("GET", "/api/threads")
+        return body.getJSONArray("threads").objects().map {
+            ThreadSummary(
+                id = it.getLong("id"),
+                app = it.optString("app"),
+                appName = it.optString("app_name"),
+                kind = it.optString("kind"),
+                kindLabel = it.optString("kind_label"),
+                subject = it.optString("subject"),
+                status = it.optString("status"),
+                role = it.optString("role"),
+                with = it.optString("with"),
+                updatedAt = it.optLong("updated_at"),
+                unread = it.optBoolean("unread"),
+                preview = it.optString("preview"),
+            )
+        } to body.optInt("unread")
+    }
+
+    fun thread(id: Long): ThreadDetail = parseThread(request("GET", "/api/threads/$id"))
+
+    fun createThread(fullName: String, kind: String, subject: String, message: String, device: String): ThreadDetail =
+        parseThread(
+            request(
+                "POST", "/api/apps/${appPath(fullName)}/threads",
+                JSONObject().put("kind", kind).put("subject", subject).put("message", message).put("device", device),
+            ),
+        )
+
+    fun postMessage(id: Long, message: String): ThreadDetail =
+        parseThread(request("POST", "/api/threads/$id/messages", JSONObject().put("message", message)))
+
+    fun setThreadStatus(id: Long, status: String): ThreadDetail =
+        parseThread(request("PUT", "/api/threads/$id", JSONObject().put("status", status)))
+
     // --- Push über ntfy -----------------------------------------------------
 
     /** Schaltet ntfy-Push an/aus. Liefert Benutzer + Adresse des Themas zum Abonnieren. */
@@ -175,6 +215,10 @@ class StoreApi(baseUrl: String, private val token: String?, private val installI
 
     fun addScreenshot(fullName: String, data: ByteArray) {
         upload("POST", "$base/api/dev/apps/${appPath(fullName)}/screenshots", data)
+    }
+
+    fun orderScreenshots(fullName: String, ids: List<Long>) {
+        request("PUT", "/api/dev/apps/${appPath(fullName)}/screenshots", JSONObject().put("order", JSONArray(ids)))
     }
 
     fun deleteScreenshot(fullName: String, id: Long) {
@@ -467,6 +511,30 @@ class StoreApi(baseUrl: String, private val token: String?, private val installI
             ratingAverage = o.optJSONObject("rating")?.optDouble("average", 0.0) ?: 0.0,
             ratingCount = o.optJSONObject("rating")?.optInt("count") ?: 0,
             reviewReleases = o.optBoolean("review_releases"),
+        )
+
+        fun parseThread(o: JSONObject) = ThreadDetail(
+            id = o.getLong("id"),
+            app = o.optString("app"),
+            appName = o.optString("app_name"),
+            kindLabel = o.optString("kind_label"),
+            subject = o.optString("subject"),
+            status = o.optString("status"),
+            role = o.optString("role"),
+            device = o.optString("device"),
+            user = o.optString("user"),
+            developer = o.optString("developer"),
+            createdAt = o.optLong("created_at"),
+            messages = (o.optJSONArray("messages") ?: JSONArray()).objects().map {
+                ChatMessage(
+                    id = it.getLong("id"),
+                    author = it.optString("author"),
+                    fromDev = it.optBoolean("from_dev"),
+                    mine = it.optBoolean("mine"),
+                    body = it.optString("body"),
+                    createdAt = it.optLong("created_at"),
+                )
+            },
         )
 
         fun parseReviews(o: JSONObject): ReviewList {

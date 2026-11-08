@@ -30,6 +30,10 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -143,6 +147,8 @@ fun DetailScreen(entry: AppEntry?, task: Task?, state: UiState, vm: StoreViewMod
 
             ReviewsSection(app, state, vm)
 
+            if (!app.canManage) ContactCard(entry, state, vm)
+
             FlowRow {
                 if (app.homepage.isNotBlank()) TextButton(onClick = { vm.openUrl(app.homepage) }) { Text("Webseite") }
                 if (app.htmlUrl.isNotBlank() && app.htmlUrl != app.homepage) {
@@ -198,4 +204,30 @@ private fun InfoRow(label: String, value: String) {
             modifier = Modifier.weight(0.4f))
         Text(value, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(0.6f))
     }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ContactCard(entry: AppEntry, state: UiState, vm: StoreViewModel) {
+    var kind by rememberSaveable { mutableStateOf<String?>(null) }
+    val open = { k: String ->
+        if (state.user == null) {
+            vm.toast("Zum Schreiben bitte anmelden")
+            vm.navigate(Screen.Account)
+        } else {
+            kind = k
+        }
+    }
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Fehler gefunden oder Feedback?", style = MaterialTheme.typography.titleMedium)
+            Hint("Schreib dem Entwickler direkt – er bekommt eine Benachrichtigung und kann dir antworten.")
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { open("bug") }) { Text("🐞 Fehler melden") }
+                OutlinedButton(onClick = { open("feedback") }) { Text("💡 Feedback") }
+                OutlinedButton(onClick = { open("question") }) { Text("❓ Frage") }
+            }
+        }
+    }
+    kind?.let { k -> ContactDeveloperDialog(entry, k, vm) { kind = null } }
 }

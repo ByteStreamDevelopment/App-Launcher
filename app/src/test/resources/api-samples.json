@@ -1,4 +1,55 @@
 {
+ "threads": {
+  "threads": [
+   {
+    "id": 1,
+    "app": "anna/spiel",
+    "app_name": "Mein Spiel",
+    "kind": "bug",
+    "kind_label": "Fehlermeldung",
+    "subject": "Absturz",
+    "status": "open",
+    "role": "user",
+    "with": "Entwickler",
+    "updated_at": 1794179090,
+    "unread": true,
+    "preview": "Schau ich mir an"
+   }
+  ],
+  "unread": 1
+ },
+ "thread": {
+  "id": 1,
+  "app": "anna/spiel",
+  "app_name": "Mein Spiel",
+  "kind": "bug",
+  "kind_label": "Fehlermeldung",
+  "subject": "Absturz",
+  "status": "open",
+  "role": "dev",
+  "device": "Pixel 7",
+  "user": "bert",
+  "developer": "anna",
+  "created_at": 1794179090,
+  "messages": [
+   {
+    "id": 1,
+    "author": "bert",
+    "from_dev": false,
+    "mine": false,
+    "body": "Hilfe",
+    "created_at": 1794179090
+   },
+   {
+    "id": 2,
+    "author": "anna",
+    "from_dev": true,
+    "mine": true,
+    "body": "Schau ich mir an",
+    "created_at": 1794179090
+   }
+  ]
+ },
  "apps": {
   "apps": [
    {
@@ -105,7 +156,7 @@
      "tag": "1.1.0-beta",
      "name": "1.1.0-beta",
      "notes": "",
-     "published_at": "2026-11-08T22:02:41Z",
+     "published_at": "2026-11-08T23:04:50Z",
      "html_url": "",
      "channel": "beta"
     },
@@ -151,7 +202,8 @@
    "notify_updates": true,
    "notify_news": false,
    "ntfy_topic": ""
-  }
+  },
+  "unread_messages": 1
  },
  "devapp": {
   "id": "anna/spiel",
@@ -183,7 +235,7 @@
   "codes_used": 0,
   "testers": 1,
   "unlocked_users": 1,
-  "created_at": 1794175361,
+  "created_at": 1794179090,
   "pending_versions": [],
   "blocked_versions": [],
   "screenshots": [
@@ -222,7 +274,7 @@
     "amount_cents": 199,
     "price": "1,99 €",
     "status": "paid",
-    "created_at": 1794175361,
+    "created_at": 1794179090,
     "withdrawn_at": null,
     "can_withdraw": true
    }
@@ -242,7 +294,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794175361,
+    "created_at": 1794179090,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -260,7 +312,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794175361,
+    "created_at": 1794179090,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 1,
@@ -278,7 +330,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794175361,
+    "created_at": 1794179090,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -312,7 +364,8 @@
   "releases_pending": 0,
   "review_releases": false,
   "scanner_enabled": false,
-  "push_enabled": true
+  "push_enabled": true,
+  "contact_open": 0
  },
  "reviews": {
   "average": 4.0,
@@ -331,8 +384,8 @@
     "rating": 4,
     "text": "Gut",
     "version": "1.1.0-beta",
-    "created_at": 1794175361,
-    "updated_at": 1794175361,
+    "created_at": 1794179090,
+    "updated_at": 1794179090,
     "reply": "",
     "reply_at": null,
     "mine": true
@@ -346,8 +399,8 @@
    "rating": 4,
    "text": "Gut",
    "version": "1.1.0-beta",
-   "created_at": 1794175361,
-   "updated_at": 1794175361,
+   "created_at": 1794179090,
+   "updated_at": 1794179090,
    "reply": "",
    "reply_at": null,
    "mine": true

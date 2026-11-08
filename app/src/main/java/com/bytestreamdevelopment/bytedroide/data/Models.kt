@@ -208,6 +208,47 @@ data class DevRelease(
 
 data class Screenshot(val id: Long, val url: String)
 
+/** Gespräch zwischen Nutzer und Entwickler (Übersicht). */
+data class ThreadSummary(
+    val id: Long,
+    val app: String,
+    val appName: String,
+    val kind: String,
+    val kindLabel: String,
+    val subject: String,
+    val status: String,
+    /** "user" = ich habe geschrieben, "dev" = ich betreue die App */
+    val role: String,
+    val with: String,
+    val updatedAt: Long,
+    val unread: Boolean,
+    val preview: String,
+)
+
+data class ChatMessage(
+    val id: Long,
+    val author: String,
+    val fromDev: Boolean,
+    val mine: Boolean,
+    val body: String,
+    val createdAt: Long,
+)
+
+data class ThreadDetail(
+    val id: Long,
+    val app: String,
+    val appName: String,
+    val kindLabel: String,
+    val subject: String,
+    val status: String,
+    val role: String,
+    val device: String,
+    val user: String,
+    val developer: String,
+    val createdAt: Long,
+    val messages: List<ChatMessage>,
+)
+
 data class Review(
     val userId: Long,
     val username: String,
