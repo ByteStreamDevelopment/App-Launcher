@@ -19,6 +19,7 @@ import os
 import re
 import secrets
 import socket
+import sys
 import sqlite3
 import tempfile
 import threading
@@ -2480,10 +2481,62 @@ def drop_privileges(config: Config):
     log.info("Datenordner %s gehören jetzt UID %s, Server läuft ohne Root-Rechte", ", ".join(sorted(dirs)), uid)
 
 
+CLI_HELP = """Verwaltung auf der Kommandozeile (im Container: docker exec bytedroide python store_server.py …):
+  users                         alle Konten mit Rolle anzeigen
+  set-role BENUTZER ROLLE       Rolle setzen: user, developer oder admin
+  reset-password BENUTZER       neues Zufallspasswort setzen und anzeigen
+Ohne Befehl startet der Server."""
+
+
+def cli(config: Config, args: list) -> int:
+    """Kleine Admin-Kommandozeile, arbeitet direkt auf der Datenbank."""
+    db = Database(config.db_path)
+    cmd = args[0]
+    with db.connect() as conn:
+        if cmd == "users" and len(args) == 1:
+            for r in conn.execute("SELECT username, role, email, email_verified, dev_requested_at FROM users "
+                                  "ORDER BY role, username COLLATE NOCASE"):
+                extra = " (möchte Entwickler werden)" if r["dev_requested_at"] else ""
+                print(f"{r['username']:<24} {r['role']:<10} {r['email'] or '-'}"
+                      f"{'' if r['email_verified'] else ' (unbestätigt)'}{extra}")
+            return 0
+        if cmd == "set-role" and len(args) == 3:
+            name, role = args[1], args[2].lower()
+            if role not in ROLES:
+                print(f"Rolle muss eins von {', '.join(ROLES)} sein", file=sys.stderr)
+                return 2
+            row = conn.execute("SELECT * FROM users WHERE username = ?", (name,)).fetchone()
+            if not row:
+                print(f"Benutzer {name} nicht gefunden (Liste: users)", file=sys.stderr)
+                return 1
+            if row["role"] == "admin" and role != "admin" and conn.execute(
+                    "SELECT COUNT(*) FROM users WHERE role = 'admin'").fetchone()[0] <= 1:
+                print("Das ist der letzte Admin – zuerst jemand anderen zum Admin machen", file=sys.stderr)
+                return 1
+            conn.execute("UPDATE users SET role = ?, dev_requested_at = CASE WHEN ? = 'user' THEN dev_requested_at "
+                         "ELSE NULL END WHERE id = ?", (role, role, row["id"]))
+            print(f"{row['username']}: {row['role']} -> {role}")
+            return 0
+        if cmd == "reset-password" and len(args) == 2:
+            row = conn.execute("SELECT * FROM users WHERE username = ?", (args[1],)).fetchone()
+            if not row:
+                print(f"Benutzer {args[1]} nicht gefunden (Liste: users)", file=sys.stderr)
+                return 1
+            password = secrets.token_urlsafe(12)
+            conn.execute("UPDATE users SET pw_hash = ? WHERE id = ?", (hash_password(password), row["id"]))
+            conn.execute("DELETE FROM sessions WHERE user_id = ? AND label IS NULL", (row["id"],))
+            print(f"Neues Passwort für {row['username']}: {password}")
+            return 0
+    print(CLI_HELP, file=sys.stderr)
+    return 2
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = Config()
     drop_privileges(config)
+    if len(sys.argv) > 1:
+        raise SystemExit(cli(config, sys.argv[1:]))
     db_dir = os.path.dirname(os.path.abspath(config.db_path))
     if not os.access(db_dir, os.W_OK):
         log.error("Kein Schreibrecht auf %s (läuft als UID %s). Lösung auf dem Host: chown -R %s:%s data",

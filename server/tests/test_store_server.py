@@ -729,6 +729,29 @@ class PaidWithoutStripeTest(ServerTestCase):
 # Einheiten
 # ---------------------------------------------------------------------------
 
+class CliTest(ServerTestCase):
+    def test_rolle_per_kommandozeile(self):
+        import contextlib
+        admin = self.admin()
+        self.register("Mrcoolgamer11")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(ss.cli(self.config, ["set-role", "mrcoolgamer11", "admin"]), 0)
+            self.assertEqual(ss.cli(self.config, ["users"]), 0)
+        self.assertIn("user -> admin", out.getvalue())
+        self.assertEqual(self.users(admin)["Mrcoolgamer11"]["role"], "admin")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(ss.cli(self.config, ["set-role", "niemand", "admin"]), 1)
+            self.assertEqual(ss.cli(self.config, ["set-role", "chef", "chef"]), 2)
+            ss.cli(self.config, ["set-role", "Mrcoolgamer11", "user"])
+            self.assertEqual(ss.cli(self.config, ["set-role", "chef", "user"]), 1)  # letzter Admin
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(ss.cli(self.config, ["reset-password", "chef"]), 0)
+        pw = out.getvalue().rsplit(": ", 1)[1].strip()
+        self.assertEqual(self.call("POST", "/api/login", {"username": "chef", "password": pw})[0], 200)
+        self.assertEqual(self.call("GET", "/api/me", token=admin)[0], 401)  # alte Sitzung beendet
+
+
 class HelperTest(unittest.TestCase):
     def test_passwort_hash(self):
         h = ss.hash_password("geheim123")

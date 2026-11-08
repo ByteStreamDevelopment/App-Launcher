@@ -120,6 +120,14 @@ Eine bestehende Datenbank aus Version 1.x wird beim Start automatisch übernomme
 
 Ohne Docker: `cd server && python3 store_server.py`
 
+**Verwaltung per Kommandozeile** (z. B. wenn man sich ausgesperrt hat):
+
+```bash
+docker exec bytedroide python store_server.py users
+docker exec bytedroide python store_server.py set-role Mrcoolgamer11 admin
+docker exec bytedroide python store_server.py reset-password BENUTZER
+```
+
 Tests: `python3 -m unittest discover -s server/tests`
 
 ### Stripe einrichten (optional)
@@ -209,6 +217,11 @@ Einmalig einrichten:
 3. In `server/.env` `STORE_APP_ID=DEINNAME/bytedroide` setzen → die APK gibt es dann auch unter `/download`.
 
 Danach genügt: GitHub → Releases → „Draft a new release“ → Tag `v2.1.0` → Publish.
+
+**Mit Forgejo statt GitHub:** `.forgejo/workflows/release.yml` macht dasselbe auf einem Forgejo-Runner (für einen
+Spiegel des Repos auf Forgejo; `runs-on` ggf. an das Label deines Runners anpassen). Die APK wird an das
+Forgejo-Release gehängt; mit `FORGEJO_AUTO_IMPORT=1` übernimmt der Store sie dann automatisch – `BYTEDROIDE_API_KEY`
+in dem Fall nicht setzen, sonst gibt es die App doppelt. Secrets wie bei GitHub, optional `RELEASE_TOKEN`.
 
 **Der Store aktualisiert sich selbst**, wenn er als App im eigenen Katalog liegt (z. B. per Upload oder Forgejo-Release);
 mit `STORE_APP_ID` ist er außerdem unter `https://apps.nebendahl.eu/download` erhältlich.
