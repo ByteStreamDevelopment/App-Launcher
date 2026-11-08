@@ -4,7 +4,23 @@ services:
     container_name: bytedroide
     restart: unless-stopped
     env_file: .env
-    ports:
-      - "8080:8080"
+    environment:
+      # Caddy sitzt davor und liefert die echte Client-IP in X-Forwarded-For
+      TRUST_PROXY: "1"
+    # Port 8080 nur INTERN im Docker-Netzwerk – auf dem Host wird nichts belegt.
+    # Caddy erreicht den Store unter http://bytedroide:8080.
+    expose:
+      - "8080"
     volumes:
       - ./data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - reverse-proxy
+
+networks:
+  reverse-proxy:
+    external: true
