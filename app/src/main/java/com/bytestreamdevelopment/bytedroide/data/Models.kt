@@ -65,6 +65,8 @@ data class StoreApp(
     val beta: BetaInfo,
     val review: String,
     val canManage: Boolean,
+    /** Paketname laut Server (nur bei hochgeladenen Apps bekannt). */
+    val packageName: String? = null,
 ) {
     val isPaid get() = priceCents > 0
     val isBetaRelease get() = release.channel == "beta"

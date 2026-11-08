@@ -1059,6 +1059,8 @@ class Store:
             },
             "review": row["review"],
             "can_manage": manage,
+            # bekannt bei Upload-Apps: damit erkennt die App auch Installationen, die nicht über den Store liefen
+            "package": row["package_name"],
         }
 
     def list_apps(self, user) -> list:

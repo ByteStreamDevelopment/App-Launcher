@@ -35,6 +35,7 @@ class ApiContractTest {
         assertEquals("1.1.0-beta", app.release.tag)
         assertTrue(app.release.apk.name.endsWith(".apk"))
         assertTrue(app.release.apk.size > 0)
+        assertEquals("com.anna.spiel", app.packageName)
     }
 
     @Test
