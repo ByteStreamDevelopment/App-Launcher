@@ -10,10 +10,11 @@ ENV DB_PATH=/data/store.db \
     DATA_DIR=/data/files \
     PORT=8080 \
     TZ=Europe/Berlin \
+    RUN_AS_UID=1000 \
     PYTHONUNBUFFERED=1
 VOLUME /data
 EXPOSE 8080
-USER store
+# Startet als root, korrigiert die Rechte von /data und läuft dann als Benutzer "store" (UID 1000) weiter.
 
 HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8080/healthz')"
 CMD ["python", "store_server.py"]
