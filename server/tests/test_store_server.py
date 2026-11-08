@@ -207,6 +207,22 @@ class StoreServerTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/login", {"username": "anna", "password": "passwort123"})[0], 429)
 
 
+class AdminPasswordConfigTest(unittest.TestCase):
+    def test_eingebauter_hash_ist_standard(self):
+        config = ss.Config({})
+        self.assertEqual(config.admin_password_hash, ss.DEFAULT_ADMIN_PASSWORD_HASH)
+        self.assertFalse(ss.verify_password("falsch", config.admin_password_hash))
+
+    def test_hash_aus_umgebung(self):
+        h = ss.hash_password("anderes-passwort")
+        config = ss.Config({"ADMIN_PASSWORD_HASH": h})
+        self.assertTrue(ss.verify_password("anderes-passwort", config.admin_password_hash))
+
+    def test_klartext_hat_vorrang(self):
+        config = ss.Config({"ADMIN_PASSWORD": "klartext123", "ADMIN_PASSWORD_HASH": ss.hash_password("x")})
+        self.assertTrue(ss.verify_password("klartext123", config.admin_password_hash))
+
+
 class HelperTest(unittest.TestCase):
     def test_passwort_hash(self):
         h = ss.hash_password("geheim123")

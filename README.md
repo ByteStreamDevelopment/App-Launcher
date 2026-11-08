@@ -42,7 +42,7 @@ Liegt in [`server/`](server/), nur Python-Standardbibliothek + SQLite, am einfac
 
 ```bash
 cd server
-cp .env.example .env      # ADMIN_PASSWORD und FORGEJO_TOKEN eintragen
+cp .env.example .env      # FORGEJO_TOKEN eintragen (Admin-Passwort ist schon eingebaut)
 docker compose up -d --build
 ```
 
@@ -55,12 +55,12 @@ Die Datenbank liegt in `server/data/store.db` (Backup = diese Datei kopieren).
 | `FORGEJO_URL` | Forgejo-Adresse, Standard `https://git.nebendahl.eu` |
 | `FORGEJO_TOKEN` | Token mit `read:repository` – nötig für private Repos |
 | `ADMIN_USERNAME` | Haupt-Admin, Standard `ProfImpossible` |
-| `ADMIN_PASSWORD` | Passwort, das zum Registrieren des Haupt-Admins nötig ist |
+| `ADMIN_PASSWORD` / `ADMIN_PASSWORD_HASH` | optional: anderes Admin-Passwort. Ohne Angabe gilt das eingebaute (als scrypt-Hash in `store_server.py`) |
 | `OWNERS` | optional: nur Repos dieser Benutzer/Orgs (kommagetrennt) |
 | `DEFAULT_ACCESS` | Freigabe neu entdeckter Apps: `open`, `code` oder `hidden` |
 | `TRUST_PROXY` | `1` hinter Reverse-Proxy (echte IP für die Fehlversuch-Bremse) |
 
-Ohne Docker: `cd server && ADMIN_PASSWORD=... python3 store_server.py`
+Ohne Docker: `cd server && python3 store_server.py`
 
 Tests: `python3 -m unittest discover -s server/tests`
 

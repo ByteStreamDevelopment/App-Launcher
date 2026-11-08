@@ -11,8 +11,9 @@
 - **Rechte**: Haupt-Admin `ProfImpossible` (nur mit `ADMIN_PASSWORD` registrierbar, nie entfernbar/löschbar).
   Admins können andere zu Admins machen. Normale Registrierung ist offen (ohne Admin-Passwort).
   App-Freigabe pro App: `open` / `code` (Einmal-Code, schaltet dauerhaft pro Konto frei) / `hidden`.
-  Das Admin-Passwort steht NICHT im Repo – nur in `server/.env` beim Nutzer.
-- **Server testen**: `python3 -m unittest discover -s server/tests` (11 Tests, Fake-Forgejo).
+  Das Admin-Passwort steht NICHT im Klartext im Repo, nur als scrypt-Hash (`DEFAULT_ADMIN_PASSWORD_HASH` in
+  `store_server.py`); der Nutzer hat das Passwort. Überschreibbar per `ADMIN_PASSWORD`/`ADMIN_PASSWORD_HASH`.
+- **Server testen**: `python3 -m unittest discover -s server/tests` (14 Tests, Fake-Forgejo).
 - **GitHub-Repo**: `bytestreamdevelopment/app-launcher`.
 - **App-Technik**: Kotlin, Jetpack Compose (Material 3), minSdk 26, targetSdk/compileSdk 35, AGP 8.7.3,
   Kotlin 2.0.21, Gradle-Wrapper 8.11.1, JDK 17. Keine Netzwerk-Bibliothek (HttpURLConnection + org.json), Coil für Bilder,

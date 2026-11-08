@@ -40,7 +40,10 @@ class Config:
         self.forgejo_token = env.get("FORGEJO_TOKEN", "").strip()
         self.owners = {o.strip().lower() for o in re.split(r"[,; ]+", env.get("OWNERS", "")) if o.strip()}
         self.admin_username = env.get("ADMIN_USERNAME", "ProfImpossible").strip()
-        self.admin_password = env.get("ADMIN_PASSWORD", "")
+        # Klartext-Passwort aus der Umgebung hat Vorrang, sonst der (eingebaute) Hash
+        plain = env.get("ADMIN_PASSWORD", "")
+        self.admin_password_hash = (hash_password(plain) if plain
+                                    else env.get("ADMIN_PASSWORD_HASH", "").strip() or DEFAULT_ADMIN_PASSWORD_HASH)
         self.db_path = env.get("DB_PATH", "store.db")
         self.host = env.get("HOST", "0.0.0.0")
         self.port = int(env.get("PORT", "8080"))
@@ -52,6 +55,10 @@ class Config:
 
 
 ACCESS_MODES = ("open", "code", "hidden")
+
+# scrypt-Hash des Admin-Passworts (das Passwort selbst steht nirgends im Repo).
+# Überschreibbar mit ADMIN_PASSWORD (Klartext) oder ADMIN_PASSWORD_HASH in der .env.
+DEFAULT_ADMIN_PASSWORD_HASH = "scrypt$c9246db68338f02dfd42cfc97bbebaaf$3a96d89a84c6dcfd15b1f719caa1d50c5ef9cd78c21b96950950dc882e7107a1"
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # ohne 0/O/1/I
 
@@ -329,8 +336,8 @@ class Store:
             raise HttpError(400, "Passwort muss mindestens 8 Zeichen haben")
         is_admin = 0
         if username.lower() == self.config.admin_username.lower():
-            if not self.config.admin_password or not hmac.compare_digest(
-                    (admin_password or "").encode(), self.config.admin_password.encode()):
+            if not self.config.admin_password_hash or not verify_password(
+                    admin_password or "", self.config.admin_password_hash):
                 self.limiter.fail(ip)
                 raise HttpError(403, "Für diesen Benutzernamen ist das Admin-Passwort nötig")
             is_admin = 1
@@ -781,8 +788,6 @@ def make_server(config: Config, catalog: Catalog = None) -> ThreadingHTTPServer:
 def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     config = Config()
-    if not config.admin_password:
-        log.warning("ADMIN_PASSWORD ist nicht gesetzt – %s kann sich nicht registrieren!", config.admin_username)
     if not config.forgejo_token:
         log.warning("FORGEJO_TOKEN ist nicht gesetzt – nur öffentliche Repos sind sichtbar.")
     server = make_server(config)
