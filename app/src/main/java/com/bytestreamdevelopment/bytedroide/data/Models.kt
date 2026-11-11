@@ -70,6 +70,9 @@ data class StoreApp(
     val ratingAverage: Double = 0.0,
     val ratingCount: Int = 0,
     val screenshots: List<String> = emptyList(),
+    /** Anzahl Downloads und gerundete Anzeige ("1.000+", "Neu"). */
+    val downloads: Int = 0,
+    val downloadsLabel: String = "",
 ) {
     val isPaid get() = priceCents > 0
     val isBetaRelease get() = release.channel == "beta"

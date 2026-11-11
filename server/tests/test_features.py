@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import unittest
+import urllib.request
 
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -279,13 +280,14 @@ class StorefrontTest(FeatureCase):
         page = page.decode()
         self.assertEqual(status, 200)
         self.assertIn("Mein Spiel", page)
-        self.assertIn("&lt;b&gt;fett", page)  # escaped
         self.assertIn("<svg", page)  # QR für /download
         self.assertIn("Mein Spiel", self.call("GET", "/apps?kategorie=Spiele", raw=True)[1].decode())
         self.assertNotIn("Mein Spiel</div>", self.call("GET", "/apps?q=gibtsnicht", raw=True)[1].decode())
         status, page = self.call("GET", "/app/anna/spiel", raw=True)
         page = page.decode()
         self.assertIn("APK direkt laden", page)
+        self.assertIn("&lt;b&gt;fett", page)  # escaped
+        self.assertNotIn("<b>fett", page)
         self.assertIn("<svg", page)
         status, svg = self.call("GET", "/app/anna/spiel/qr.svg", raw=True)
         self.assertTrue(svg.startswith(b"<svg"))
@@ -463,3 +465,184 @@ class WebPagesTest(FeatureCase):
         status, view = self.call("GET", "/api/apps/anna/spiel")
         self.assertEqual((status, view["id"]), (200, "anna/spiel"))
         self.assertEqual(self.call("GET", "/portal", raw=True)[0], 200)  # Weiterleitung auf /konto
+
+
+# ---------------------------------------------------------------------------
+# Runde 3: App-Icons aus der APK, Versionen aus Tags, Downloads
+# ---------------------------------------------------------------------------
+
+def axml(elements):
+    """Binäres XML. elements: [("start", name, [(attr, res_id, raw|None, dtype, data)]) | ("end", name)]."""
+    names = []
+    for el in elements:
+        if el[0] == "start":
+            for a in el[2]:
+                if a[1] and a[0] not in names:
+                    names.append(a[0])
+    strings = list(names)
+
+    def idx(text):
+        if text not in strings:
+            strings.append(text)
+        return strings.index(text)
+    chunks = []
+    for el in elements:
+        if el[0] == "start":
+            attrs = b""
+            for name, _, raw, dtype, data in el[2]:
+                raw_i = idx(raw) if raw is not None else 0xFFFFFFFF
+                if dtype == 0x03 and raw is not None:
+                    data = raw_i
+                attrs += struct.pack("<IIIHBBI", 0xFFFFFFFF, idx(name), raw_i, 8, 0, dtype, data)
+            body = struct.pack("<IIHHHHHH", 0xFFFFFFFF, idx(el[1]), 20, 20, len(el[2]), 0, 0, 0) + attrs
+            chunks.append(struct.pack("<HHIII", 0x0102, 16, 16 + len(body), 1, 0xFFFFFFFF) + body)
+        else:
+            chunks.append(struct.pack("<HHIIIII", 0x0103, 16, 24, 1, 0xFFFFFFFF, 0xFFFFFFFF, idx(el[1])))
+    pool = string_pool(strings)
+    resmap = struct.pack("<HHI", 0x0180, 8, 8 + 4 * len(names)) + struct.pack(f"<{len(names)}I", *[
+        next(a[1] for el in elements if el[0] == "start" for a in el[2] if a[0] == n) for n in names])
+    content = pool + resmap + b"".join(chunks)
+    return struct.pack("<HHI", 0x0003, 8, 8 + len(content)) + content
+
+
+def string_pool(strings):
+    data, offsets = b"", []
+    for text in strings:
+        offsets.append(len(data))
+        data += struct.pack("<H", len(text)) + text.encode("utf-16-le") + b"\0\0"
+    data += b"\0" * (-len(data) % 4)
+    header = 28 + 4 * len(strings)
+    return struct.pack("<HHIIIIII", 0x0001, 28, header + len(data), len(strings), 0, 0, header, 0) + \
+        struct.pack(f"<{len(strings)}I", *offsets) + data
+
+
+def arsc(entries):
+    """resources.arsc mit Paket 0x7f. entries: {(type_id, entry_idx): [(density, dtype, value)]}; Strings global."""
+    paths = []
+    types = {}
+    for (tid, eid), values in entries.items():
+        for density, dtype, value in values:
+            if dtype == 0x03:
+                paths.append(value)
+                value = len(paths) - 1
+            types.setdefault((tid, density), {})[eid] = (dtype, value)
+    chunks = b""
+    for (tid, density), items in types.items():
+        count = max(items) + 1
+        config = struct.pack("<IHHHHBBH", 64, 0, 0, 0, 0, 0, 0, density).ljust(64, b"\0")
+        head = 20 + len(config)
+        offsets, body = [], b""
+        for i in range(count):
+            if i in items:
+                offsets.append(len(body))
+                dtype, value = items[i]
+                body += struct.pack("<HHI", 8, 0, 0) + struct.pack("<HBBI", 8, 0, dtype, value)
+            else:
+                offsets.append(0xFFFFFFFF)
+        start = head + 4 * count
+        chunk = struct.pack("<HHIBBHII", 0x0201, head, start + len(body), tid, 0, 0, count, start) + config + \
+            struct.pack(f"<{count}I", *offsets) + body
+        chunks += chunk
+    pkg_head = struct.pack("<HHII", 0x0200, 288, 288 + len(chunks), 0x7F) + b"\0" * 256 + struct.pack("<IIIII", 0, 0, 0, 0, 0)
+    pkg = pkg_head + chunks
+    pool = string_pool(paths)
+    return struct.pack("<HHII", 0x0002, 12, 12 + len(pool) + len(pkg), 1) + pool + pkg
+
+
+def manifest(package, version, code, icon_id):
+    android = "http://schemas.android.com/apk/res/android"
+    return axml([
+        ("start", "manifest", [("versionCode", 0x0101021B, None, 0x10, code), ("versionName", 0x0101021C, version, 3, 0),
+                               ("package", 0, package, 3, 0)]),
+        ("start", "application", [("icon", 0x01010002, None, 0x01, icon_id)]),
+        ("end", "application"), ("end", "manifest")])
+
+
+ICON_PNG = b"\x89PNG\r\n\x1a\n" + b"ICON" * 10
+
+
+def apk_with_icon(package, version, code, vector=False):
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        zf.writestr("AndroidManifest.xml", manifest(package, version, code, 0x7F010000))
+        if vector:
+            # adaptive-icon (anydpi) mit Farb-Hintergrund und Vektor-Vordergrund
+            zf.writestr("res/ad.xml", axml([
+                ("start", "adaptive-icon", []),
+                ("start", "background", [("drawable", 0x01010199, None, 0x1D, 0xFF3D5AFE)]), ("end", "background"),
+                ("start", "foreground", [("drawable", 0x01010199, None, 0x01, 0x7F020000)]), ("end", "foreground"),
+                ("end", "adaptive-icon")]))
+            zf.writestr("res/fg.xml", axml([
+                ("start", "vector", [("viewportWidth", 0x01010402, None, 0x04, 0x42D80000),
+                                     ("viewportHeight", 0x01010403, None, 0x04, 0x42D80000)]),
+                ("start", "path", [("fillColor", 0x01010404, None, 0x1C, 0xFFFFFFFF),
+                                   ("pathData", 0x01010405, "M30,30h48v48h-48z", 3, 0)]), ("end", "path"),
+                ("end", "vector")]))
+            zf.writestr("resources.arsc", arsc({(1, 0): [(0xFFFE, 0x03, "res/ad.xml")],
+                                                (2, 0): [(0, 0x03, "res/fg.xml")]}))
+        else:
+            zf.writestr("res/lo.png", b"\x89PNG\r\n\x1a\nKLEIN")
+            zf.writestr("res/hi.png", ICON_PNG)
+            zf.writestr("res/ad.xml", b"wird ignoriert")
+            zf.writestr("resources.arsc", arsc({(1, 0): [(160, 0x03, "res/lo.png"), (640, 0x03, "res/hi.png"),
+                                                         (0xFFFE, 0x03, "res/ad.xml")]}))
+        zf.writestr("classes.dex", b"dex\n035\0")
+    return buf.getvalue()
+
+
+import io  # noqa: E402
+import zipfile  # noqa: E402
+import apk_icon  # noqa: E402
+
+
+class IconTest(FeatureCase):
+    def test_icon_aus_apk(self):
+        path = os.path.join(self.tmp.name, "i.apk")
+        with open(path, "wb") as f:
+            f.write(apk_with_icon("com.x.y", "1.0", 1))
+        self.assertEqual(apk_icon.extract_icon(path), (ICON_PNG, "png"))  # größte Dichte, Bitmap vor XML
+        with open(path, "wb") as f:
+            f.write(apk_with_icon("com.x.y", "1.0", 1, vector=True))
+        data, ext = apk_icon.extract_icon(path)
+        self.assertEqual(ext, "svg")
+        svg = data.decode()
+        self.assertIn('fill="#3d5afe"', svg)
+        self.assertIn('d="M30,30h48v48h-48z"', svg)
+        self.assertIn('viewBox="18 18 72 72"', svg)
+        with open(path, "wb") as f:
+            f.write(make_apk())  # ohne Icon
+        self.assertIsNone(apk_icon.extract_icon(path))
+
+    def test_upload_setzt_icon(self):
+        self.call("POST", "/api/dev/apps", {"slug": "spiel", "name": "Mein Spiel"}, self.dev)
+        self.call("PUT", "/api/admin/apps/anna/spiel", {"review": "approved"}, self.admin_tok)
+        self.upload(self.dev, "anna/spiel", apk_with_icon("com.anna.spiel", "1.0.0", 1))
+        url = self.apps()["anna/spiel"]["avatar_url"]
+        self.assertIn("/api/apps/anna/spiel/icon", url)
+        self.assertEqual(self.call("GET", url.replace("https://store.test", ""), raw=True), (200, ICON_PNG))
+        # hochgeladenes Icon hat Vorrang und wird von neuen Versionen nicht überschrieben
+        self.call("POST", "/api/dev/apps/anna/spiel/icon", data=PNG, token=self.dev)
+        self.upload(self.dev, "anna/spiel", apk_with_icon("com.anna.spiel", "1.1.0", 2, vector=True))
+        url = self.apps()["anna/spiel"]["avatar_url"]
+        self.assertEqual(self.call("GET", url.replace("https://store.test", ""), raw=True), (200, PNG))
+
+    def test_vektor_icon_als_svg(self):
+        self.call("POST", "/api/dev/apps", {"slug": "spiel", "name": "Mein Spiel"}, self.dev)
+        self.call("PUT", "/api/admin/apps/anna/spiel", {"review": "approved"}, self.admin_tok)
+        self.upload(self.dev, "anna/spiel", apk_with_icon("com.anna.spiel", "1.0.0", 1, vector=True))
+        url = self.apps()["anna/spiel"]["avatar_url"].replace("https://store.test", "")
+        req = urllib.request.Request(self.base + url)
+        with urllib.request.urlopen(req) as r:
+            self.assertEqual(r.headers["Content-Type"], "image/svg+xml")
+            self.assertIn("default-src 'none'", r.headers["Content-Security-Policy"])
+
+
+class VersionLabelTest(unittest.TestCase):
+    def test_version_aus_tag(self):
+        self.assertEqual(ss.normalize_version("android-v1.0.24"), "1.0.24")
+        self.assertEqual(ss.normalize_version("v2.6.3"), "2.6.3")
+        self.assertEqual(ss.normalize_version("1.1.0-beta2"), "1.1.0-beta2")
+        self.assertEqual(ss.normalize_version("nightly-2"), "nightly-2")
+
+    def test_downloads(self):
+        self.assertEqual([ss.downloads_label(n) for n in (0, 3, 64, 999, 1234)], ["Neu", "1+", "50+", "500+", "1.000+"])

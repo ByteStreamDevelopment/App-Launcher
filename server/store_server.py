@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+import apk_icon
 import apk_info
 import legal
 import mailer as mail
@@ -162,8 +163,22 @@ def normalize_code(code: str) -> str:
     return f"{raw[:4]}-{raw[4:]}" if len(raw) == 8 else raw
 
 
+VERSION_IN_TAG = re.compile(r"(?<![0-9A-Za-z])[vV]?(\d+(?:\.\d+)+\S*)")
+
+
 def normalize_version(tag: str) -> str:
-    return re.sub(r"^[vV](?=\d)", "", (tag or "").strip())
+    """Versionsnummer aus einem Tag: "v2.5.0" -> "2.5.0", "android-v1.0.24" -> "1.0.24"."""
+    tag = (tag or "").strip()
+    m = VERSION_IN_TAG.search(tag)
+    return m.group(1) if m else re.sub(r"^[vV](?=\d)", "", tag)
+
+
+def downloads_label(n: int) -> str:
+    """Play-Store-artige Download-Angabe: 64 -> "50+", 1234 -> "1.000+"."""
+    if n <= 0:
+        return "Neu"
+    value = max(c for c in (b * 10 ** k for k in range(10) for b in (1, 5)) if c <= n)
+    return f"{value:,}+".replace(",", ".")
 
 
 def format_price(cents: int, currency: str = "eur") -> str:
@@ -421,6 +436,8 @@ APP_COLUMNS = {
     "pending_beta": "TEXT",
     # gesperrte Versionen (abgelehnt oder Schadsoftware), JSON-Liste
     "blocked_tags": "TEXT NOT NULL DEFAULT '[]'",
+    # 1 = Icon wurde automatisch aus der APK gelesen (ein hochgeladenes Icon hat Vorrang)
+    "icon_auto": "INTEGER NOT NULL DEFAULT 0",
 }
 RELEASE_COLUMNS = {
     "status": "TEXT NOT NULL DEFAULT 'approved'",   # approved | pending | rejected
@@ -665,6 +682,7 @@ class Store:
         self.pusher = pusher or notify.Pusher(config.ntfy_url, config.ntfy_token)
         self.scanner = virus_scanner or scanner.Scanner(config.clamav_host, config.clamav_port)
         self._scanning: set = set()     # (app, tag) – Virenscan läuft
+        self._icon_tried: set = set()   # Apps, für die das Icon schon gesucht wurde
         self._scan_lock = threading.Lock()
         self.limiter = RateLimiter()
         self.signup_limiter = RateLimiter(max_failures=20, window=3600)
@@ -1072,6 +1090,7 @@ class Store:
                     self._check_new_release(row, self.sources.cached(row))
             if time.time() - self._last_cleanup > 86400:
                 self._cleanup()
+        self._backfill_icons()
 
     def _import_forgejo(self):
         try:
@@ -1220,7 +1239,8 @@ class Store:
         shots: dict = {}
         for r in conn.execute("SELECT id, app FROM screenshots ORDER BY position, id"):
             shots.setdefault(r["app"], []).append(r["id"])
-        return {"ratings": ratings, "screenshots": shots}
+        downloads = {r["app"]: r["n"] for r in conn.execute("SELECT app, COUNT(*) AS n FROM downloads GROUP BY app")}
+        return {"ratings": ratings, "screenshots": shots, "downloads": downloads}
 
     def _screenshot_urls(self, row, ids):
         return [f"{self.config.public_url}/api/apps/{row['id']}/screenshots/{sid}" for sid in ids]
@@ -1273,6 +1293,9 @@ class Store:
             "rating": {"average": (extras or {}).get("ratings", {}).get(row["key"], (0, 0))[0],
                        "count": (extras or {}).get("ratings", {}).get(row["key"], (0, 0))[1]},
             "screenshots": self._screenshot_urls(row, (extras or {}).get("screenshots", {}).get(row["key"], [])),
+            "downloads": (extras or {}).get("downloads", {}).get(row["key"], 0),
+            "downloads_label": downloads_label((extras or {}).get("downloads", {}).get(row["key"], 0)),
+            "version": normalize_version(rel["tag"]),
         }
 
     def list_apps(self, user, viewer=None) -> list:
@@ -1366,6 +1389,9 @@ class Store:
         if row["source_type"] != "upload":
             fields[held_col] = self._snapshot(rel)
         self._set_app(row["key"], **fields)
+        if row["source_type"] != "upload" and (channel == "stable" or not row["icon_path"]):
+            self._icon_tried.add(row["key"])
+            self._auto_icon_from_source(row["key"], rel)
         if notify:
             self._notify_release(row, rel, channel)
 
@@ -1810,8 +1836,11 @@ class Store:
                  sha256, rel_path, now(), status, rollout, scan))
             conn.execute("UPDATE apps SET package_name = ?, updated_at = ? WHERE key = ?",
                          (info["package"], now(), row["key"]))
+            stored_apk = os.path.join(self.config.data_dir, rel_path)
             rels = self._upload_releases(conn, row["key"])
             row = self._app_row(conn, row["key"])
+        if channel == "stable" or not row["icon_path"]:
+            self._auto_icon_from_file(row["key"], stored_apk)
         if status == "pending":
             self._notify_release_review(row, version, channel)
         else:
@@ -1875,6 +1904,73 @@ class Store:
         except OSError:
             pass
 
+    # --- Automatische Icons aus der APK -------------------------------------------
+
+    def _auto_icon_from_file(self, key, apk_path) -> bool:
+        """Liest das Icon aus einer APK und speichert es, sofern kein hochgeladenes Icon existiert."""
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT icon_path, icon_auto FROM apps WHERE key = ?", (key,)).fetchone()
+        if not row or (row["icon_path"] and not row["icon_auto"]):
+            return False
+        found = apk_icon.extract_icon(apk_path)
+        if not found:
+            return False
+        data, ext = found
+        path = os.path.join("icons", f"{hashlib.sha256(data).hexdigest()[:24]}.{ext}")
+        if path == row["icon_path"]:
+            return True
+        with open(os.path.join(self.config.data_dir, path), "wb") as f:
+            f.write(data)
+        with self.db.connect() as conn:
+            conn.execute("UPDATE apps SET icon_path = ?, icon_auto = 1 WHERE key = ?", (path, key))
+            still_used = conn.execute("SELECT 1 FROM apps WHERE icon_path = ?", (row["icon_path"],)).fetchone()
+        if row["icon_path"] and not still_used:
+            try:
+                os.remove(os.path.join(self.config.data_dir, row["icon_path"]))
+            except OSError:
+                pass
+        return True
+
+    def _auto_icon_from_source(self, key, rel):
+        """Im Hintergrund: APK der Quelle laden und das Icon auslesen."""
+        def work():
+            fd, tmp = tempfile.mkstemp(dir=os.path.join(self.config.data_dir, "apks"), suffix=".icon")
+            try:
+                url, headers = rel["apks"][0]["fetch"]
+                with os.fdopen(fd, "wb") as out, self.sources.open_download(url, headers) as resp:
+                    left = self.config.max_upload_mb * 1024 * 1024
+                    while left > 0:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                        left -= len(chunk)
+                self._auto_icon_from_file(key, tmp)
+            except Exception as e:
+                log.info("Icon für %s nicht ladbar: %s", key, e)
+            finally:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+        threading.Thread(target=work, daemon=True, name="icon").start()
+
+    def _backfill_icons(self):
+        """Einmal je Start: fehlende Icons nachtragen (Uploads lokal, Quellen im Hintergrund)."""
+        with self.db.connect() as conn:
+            rows = [r for r in self._app_rows(conn) if not r["icon_path"] and r["key"] not in self._icon_tried]
+            uploads = {r["app_key"]: r["path"] for r in conn.execute(
+                "SELECT app_key, path FROM releases WHERE status = 'approved' ORDER BY created_at")}
+        for row in rows:
+            self._icon_tried.add(row["key"])
+            if row["source_type"] == "upload":
+                if row["key"] in uploads:
+                    self._auto_icon_from_file(row["key"], os.path.join(self.config.data_dir, uploads[row["key"]]))
+            else:
+                rel = self.sources.cached(row).get("stable") or self.sources.cached(row).get("beta")
+                if rel:
+                    self._auto_icon_from_source(row["key"], rel)
+
     def set_icon(self, user, app_id, data: bytes):
         row = self._require_manage(user, app_id)
         if data.startswith(b"\x89PNG\r\n\x1a\n"):
@@ -1889,7 +1985,8 @@ class Store:
         with open(os.path.join(self.config.data_dir, path), "wb") as f:
             f.write(data)
         with self.db.connect() as conn:
-            conn.execute("UPDATE apps SET icon_path = ?, updated_at = ? WHERE key = ?", (path, now(), row["key"]))
+            conn.execute("UPDATE apps SET icon_path = ?, icon_auto = 0, updated_at = ? WHERE key = ?",
+                         (path, now(), row["key"]))
         if row["icon_path"] and row["icon_path"] != path:
             try:
                 os.remove(os.path.join(self.config.data_dir, row["icon_path"]))
@@ -3007,7 +3104,10 @@ class Handler(BaseHTTPRequestHandler):
     def w_app(self, user, params, **_):
         _, view = self.store.app_for(None, app_id(params), self.viewer(None))
         reviews = self.store.reviews(None, app_id(params))
-        self.send_html(storefront.app_page(self.store.config, view, reviews))
+        others = [a for a in self.store.list_apps(None, self.viewer(None)) if a["id"] != view["id"]]
+        others.sort(key=lambda a: (a.get("category") != view.get("category") or not view.get("category"),
+                                   [-x for x in storefront._popularity(a)]))
+        self.send_html(storefront.app_page(self.store.config, view, reviews, others[:5]))
 
     @route("GET", f"/app/{APP_ID}/qr.svg")
     def w_app_qr(self, params, **_):
@@ -3145,9 +3245,11 @@ class Handler(BaseHTTPRequestHandler):
             raise HttpError(404, "Kein Icon")
         path = os.path.join(self.store.config.data_dir, row["icon_path"])
         ext = path.rsplit(".", 1)[-1]
+        types = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp", "svg": "image/svg+xml"}
         with open(path, "rb") as f:
-            self.send_bytes(200, f.read(), {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp"}[ext],
-                            {"Cache-Control": "public, max-age=86400"})
+            self.send_bytes(200, f.read(), types[ext], {"Cache-Control": "public, max-age=86400",
+                                                        "Content-Security-Policy": "default-src 'none'; img-src data:",
+                                                        "X-Content-Type-Options": "nosniff"})
 
     @route("POST", f"/api/apps/{APP_ID}/beta", auth="user")
     def r_beta_join(self, user, params, **_):

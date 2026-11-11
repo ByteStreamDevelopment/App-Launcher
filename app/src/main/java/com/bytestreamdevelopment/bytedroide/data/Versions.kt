@@ -2,7 +2,14 @@ package com.bytestreamdevelopment.bytedroide.data
 
 /** Vergleicht Release-Tags (z. B. "v2.5.0") mit versionName der installierten App ("2.5.0"). */
 object Versions {
-    fun normalize(version: String): String = version.trim().removePrefix("v").removePrefix("V")
+    private val VERSION_IN_TAG = Regex("(?<![0-9A-Za-z])[vV]?([0-9]+(?:\\.[0-9]+)+\\S*)")
+
+    /** Versionsnummer aus einem Tag: "v2.5.0" -> "2.5.0", "android-v1.0.24" -> "1.0.24". */
+    fun normalize(version: String): String {
+        val v = version.trim()
+        VERSION_IN_TAG.find(v)?.let { return it.groupValues[1] }
+        return v.replace(Regex("^[vV](?=[0-9])"), "")
+    }
 
     /** true, wenn [latest] neuer ist als [installed]. */
     fun isNewer(latest: String, installed: String): Boolean {

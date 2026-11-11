@@ -31,7 +31,7 @@
   }
   async function run(fn) { try { await fn(); } catch (e) { toast(e.message); } }
   const enc = id => id.split("/").map(encodeURIComponent).join("/");
-  const ver = t => (t || "").replace(/^[vV](?=\d)/, "");
+  const ver = t => { t = t || ""; const m = t.match(/(?:^|[^0-9A-Za-z])[vV]?(\d+(?:\.\d+)+\S*)/); return m ? m[1] : t.replace(/^[vV](?=\d)/, ""); };
   const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
   const day = ts => new Date(ts * 1000).toLocaleDateString("de-DE");
   function loginLink(text) {
@@ -60,7 +60,7 @@
     if (token) {
       try { me = (await api("GET", "/api/me")).user; } catch (e) { me = null; }
     }
-    if (link && me) { link.textContent = me.username; link.href = "/konto#/konto"; }
+    if (link && me) { link.textContent = me.username.slice(0, 1).toUpperCase(); link.title = "Angemeldet als " + me.username; link.classList.add("avatar"); link.href = "/konto#/konto"; }
     const appId = document.body.dataset.appId;
     if (appId) await appPage(appId);
   }
@@ -170,11 +170,11 @@
     const sec = document.getElementById("reviews");
     let data;
     try { data = await api("GET", `/api/apps/${enc(app.id)}/reviews`); } catch (e) { return; }
-    const nodes = [h("h2", {}, "Bewertungen")];
+    const nodes = [h("h2", {}, "Bewertungen und Rezensionen")];
     if (data.count) {
       const bars = data.distribution.map((n, i) => h("div", {}, `${5 - i} ★ `, h("span", { class: "bar" }, h("i", { style: `width:${Math.round(n * 100 / data.count)}%` })), " " + n));
       nodes.push(h("div", { class: "row", style: "align-items:flex-start;gap:24px;flex-wrap:wrap" },
-        h("div", {}, h("div", { style: "font-size:44px;font-weight:800;line-height:1" }, data.average.toFixed(1)),
+        h("div", {}, h("div", { style: "font-size:56px;font-weight:400;line-height:1" }, data.average.toFixed(1).replace(".", ",")),
           h("div", { class: "stars" }, stars(data.average)), h("div", { class: "muted" }, data.count + " Bewertungen")),
         h("div", { class: "bars", style: "flex:1;min-width:200px" }, bars)));
     } else nodes.push(h("p", { class: "muted" }, "Noch keine Bewertungen."));

@@ -90,6 +90,8 @@ class Catalog(private val context: Context, private val settings: StoreSettings)
                 screenshots = (o.optJSONArray("screenshots") ?: JSONArray()).let { a ->
                     (0 until a.length()).map(a::getString)
                 },
+                downloads = o.optInt("downloads"),
+                downloadsLabel = o.optString("downloads_label"),
             )
         }
 

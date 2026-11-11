@@ -32,7 +32,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
@@ -48,6 +47,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.bytestreamdevelopment.bytedroide.data.AppEntry
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import com.bytestreamdevelopment.bytedroide.data.InstallState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -134,13 +143,20 @@ private fun AppList(state: UiState, vm: StoreViewModel) {
     ) {
         if (state.tab == Tab.Discover) {
             item {
-                OutlinedTextField(
+                TextField(
                     value = state.query,
                     onValueChange = vm::setQuery,
-                    placeholder = { Text("Apps durchsuchen") },
+                    placeholder = { Text("Apps suchen") },
                     leadingIcon = { Icon(Icons.Default.Search, null) },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                    shape = RoundedCornerShape(28.dp),
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    ),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp),
                 )
             }
             if (state.categories.isNotEmpty()) {
@@ -149,12 +165,33 @@ private fun AppList(state: UiState, vm: StoreViewModel) {
                         Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        FilterChip(state.category == null, onClick = { vm.setCategory(null) }, label = { Text("Alle") })
+                        FilterChip(state.category == null, onClick = { vm.setCategory(null) }, label = { Text("Für dich") })
                         state.categories.forEach { c ->
                             FilterChip(state.category == c, onClick = { vm.setCategory(c) }, label = { Text(c) })
                         }
                     }
                 }
+            }
+            if (state.query.isBlank() && state.category == null && list.size >= 3) {
+                val newest = list.sortedByDescending { it.app.release.publishedAt }.take(15)
+                val popular = list.sortedByDescending { popularity(it) }
+                item { Shelf("Neu im Store", newest, vm) }
+                if (list.any { it.app.ratingCount > 0 || it.app.downloads > 0 }) {
+                    item { Shelf("Beliebt", popular.take(15), vm) }
+                }
+                list.groupBy { it.app.category }
+                    .filter { (c, apps) -> c.isNotBlank() && apps.size >= 3 }
+                    .entries.sortedByDescending { it.value.size }.take(4)
+                    .forEach { (c, apps) ->
+                        item(key = "shelf-$c") {
+                            Shelf(c, apps.sortedByDescending { popularity(it) }, vm) { vm.setCategory(c) }
+                        }
+                    }
+                item { SectionTitle("Top-Charts") }
+                itemsIndexed(popular, key = { _, e -> "chart-" + e.app.fullName }) { i, entry ->
+                    AppRow(entry, state.tasks[entry.app.fullName], vm, rank = i + 1)
+                }
+                return@LazyColumn
             }
         }
         if (state.tab == Tab.Updates && list.size > 1) {
@@ -189,18 +226,92 @@ private fun AppList(state: UiState, vm: StoreViewModel) {
     }
 }
 
+private fun popularity(e: AppEntry): Double =
+    e.app.ratingAverage * minOf(e.app.ratingCount, 20) + minOf(e.app.downloads, 1000) / 50.0
+
 @Composable
-private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel) {
+private fun SectionTitle(title: String, onMore: (() -> Unit)? = null) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onMore != null) Modifier.clickable(onClick = onMore) else Modifier)
+            .padding(start = 16.dp, end = 8.dp, top = 18.dp, bottom = 8.dp),
+    ) {
+        Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+        if (onMore != null) Icon(Icons.AutoMirrored.Filled.ArrowForward, "Alle anzeigen")
+    }
+}
+
+/** Horizontale Reihe mit Icon-Kacheln (wie im Play Store). */
+@Composable
+private fun Shelf(title: String, apps: List<AppEntry>, vm: StoreViewModel, onMore: (() -> Unit)? = null) {
+    Column {
+        SectionTitle(title, onMore)
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(apps, key = { it.app.fullName }) { entry -> AppTile(entry, vm) }
+        }
+    }
+}
+
+@Composable
+private fun AppTile(entry: AppEntry, vm: StoreViewModel) {
+    Column(
+        Modifier
+            .width(112.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { vm.navigate(Screen.Detail(entry.app.fullName)) }
+            .padding(6.dp),
+    ) {
+        AppIcon(entry, 100.dp)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            entry.app.name,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        val meta = when {
+            entry.state is InstallState.UpdateAvailable -> "Update"
+            entry.state is InstallState.UpToDate -> "Installiert"
+            entry.app.ratingCount > 0 -> "%.1f ★".format(entry.app.ratingAverage)
+            entry.app.isPaid -> entry.app.price
+            else -> entry.app.category
+        }
+        Text(
+            meta,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel, rank: Int? = null) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .clickable { vm.navigate(Screen.Detail(entry.app.fullName)) }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
-        AppIcon(entry, 52.dp)
+        if (rank != null) {
+            Text(
+                "$rank",
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.width(28.dp),
+            )
+        }
+        AppIcon(entry, 56.dp)
         Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
                     entry.app.name,
@@ -212,26 +323,28 @@ private fun AppRow(entry: AppEntry, task: Task?, vm: StoreViewModel) {
                 AppBadges(entry.app)
             }
             Text(
-                entry.app.description.lineSequence().firstOrNull()?.ifBlank { null } ?: entry.app.owner,
+                listOf(entry.app.owner, entry.app.category).filter { it.isNotBlank() }.joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    statusText(entry, task),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                if (entry.app.ratingCount > 0) {
-                    Text(
-                        "★ %.1f".format(entry.app.ratingAverage),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            val meta = buildList {
+                if (entry.app.ratingCount > 0) add("%.1f ★".format(entry.app.ratingAverage))
+                if (entry.app.downloads > 0) add("${entry.app.downloadsLabel} Downloads")
+            }.joinToString(" · ")
+            val status = statusText(entry, task)
+            Text(
+                if (meta.isBlank()) status else "$meta · $status",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (entry.state is InstallState.UpdateAvailable) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
         Spacer(Modifier.width(8.dp))
         ActionButton(entry, task, vm)
