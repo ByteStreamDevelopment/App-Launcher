@@ -7,18 +7,21 @@
 <title>Mein Konto – ByteDroide</title>
 <link rel="icon" href="/favicon.ico" type="image/svg+xml">
 <style>
-:root{--bg:#f6f7fb;--card:#fff;--text:#1f2937;--muted:#6b7280;--brand:#3D5AFE;--brand2:#1A237E;--border:#e5e7eb;
+:root{--bg:#f6f8fc;--card:#fff;--text:#1f1f1f;--muted:#5f6368;--brand:#3D5AFE;--brand2:#1A237E;--border:#e5e7eb;
 --ok:#059669;--warn:#d97706;--err:#dc2626;--chip:#eef2ff;--star:#f59e0b}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1117;--card:#171a23;--text:#e5e7eb;--muted:#9ca3af;--border:#2a2f3a;--chip:#1e2440}}
 *{box-sizing:border-box}html,body{overflow-x:hidden}
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
-header{background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff;padding:14px 16px 0}
+header{background:var(--card);color:var(--text);padding:10px 16px 0;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:5}
 header .in{max-width:1040px;margin:0 auto}
-header .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:10px}
-header a.logo{color:#fff;text-decoration:none;font-weight:800;font-size:20px}header .sp{flex:1}
-header .who{opacity:.9}header button{background:rgba(255,255,255,.16)}
-nav.tabs{display:flex;gap:2px;overflow-x:auto}nav.tabs a{color:rgba(255,255,255,.85);text-decoration:none;padding:10px 14px;
-border-radius:12px 12px 0 0;white-space:nowrap;font-weight:600}nav.tabs a.on{background:var(--bg);color:var(--brand)}
+header .top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:6px}
+header a.logo{color:var(--text);text-decoration:none;font-weight:600;font-size:20px;display:flex;align-items:center;gap:10px}
+header a.logo span{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,var(--brand),var(--brand2));
+display:flex;align-items:center;justify-content:center;font-size:19px}header .sp{flex:1}
+header .who{color:var(--muted)}header a.store{color:var(--brand);text-decoration:none;font-weight:600}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}nav.tabs a{color:var(--muted);text-decoration:none;padding:10px 14px;
+white-space:nowrap;font-weight:500;border-bottom:3px solid transparent}nav.tabs a:hover{color:var(--text)}
+nav.tabs a.on{color:var(--brand);border-bottom-color:var(--brand)}
 .dot{display:inline-block;min-width:18px;padding:0 5px;border-radius:9px;background:var(--err);color:#fff;font-size:12px;
 text-align:center;margin-left:4px}
 main{max-width:1040px;margin:0 auto;padding:20px 16px 60px}
@@ -67,8 +70,8 @@ a{color:var(--brand)}
 </style>
 </head>
 <body>
-<header><div class="in"><div class="top"><a class="logo" href="/">&#129302; ByteDroide</a><span class="sp"></span>
-<a href="/apps" style="color:#fff">Zum Store</a><span class="who" id="who"></span>
+<header><div class="in"><div class="top"><a class="logo" href="/"><span>&#129302;</span>ByteDroide</a><span class="sp"></span>
+<a class="store" href="/apps">Zum Store</a><span class="who" id="who"></span>
 <button id="logout" style="display:none">Abmelden</button></div><nav class="tabs" id="tabs"></nav></div></header>
 <main id="main"></main>
 <div id="toast"></div>
@@ -100,7 +103,7 @@ const date = ts => ts ? new Date(ts * 1000).toLocaleString("de-DE", { dateStyle:
 const day = ts => ts ? new Date(ts * 1000).toLocaleDateString("de-DE") : "–";
 const size = b => b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.round(b / 1024) + " KB";
 const enc = id => id.split("/").map(encodeURIComponent).join("/");
-const ver = t => (t || "").replace(/^[vV](?=\d)/, "");
+const ver = t => { t = t || ""; const m = t.match(/(?:^|[^0-9A-Za-z])[vV]?(\d+(?:\.\d+)+\S*)/); return m ? m[1] : t.replace(/^[vV](?=\d)/, ""); };
 const stars = n => "★".repeat(Math.round(n)) + "☆".repeat(5 - Math.round(n));
 
 async function api(method, path, body, raw) {

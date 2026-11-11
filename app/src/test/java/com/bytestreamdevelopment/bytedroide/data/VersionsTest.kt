@@ -18,4 +18,8 @@ class VersionsTest {
     @Test fun neueBetaNachAlterVersion() = assertTrue(Versions.isNewer("v1.2.0-beta1", "1.1.0"))
     @Test fun rcNachBeta() = assertTrue(Versions.isNewer("2.0.0-rc1", "2.0.0-beta3"))
     @Test fun normalize() = assertEquals("1.0", Versions.normalize(" V1.0 "))
+    @Test fun tagMitPraefixGleich() = assertFalse(Versions.isNewer("android-v1.0.24", "1.0.24"))
+    @Test fun tagMitPraefixNeuer() = assertTrue(Versions.isNewer("android-v1.0.25", "1.0.24"))
+    @Test fun normalizePraefix() = assertEquals("1.0.24", Versions.normalize("android-v1.0.24"))
+    @Test fun normalizeOhneZahl() = assertEquals("nightly-2", Versions.normalize("nightly-2"))
 }

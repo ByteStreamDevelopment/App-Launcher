@@ -21,7 +21,7 @@
   (14 Tage, Eingangsbestätigung per Mail), Erstattung durch Admin.
 - **Mails**: SMTP über `SMTP_*`; ohne `SMTP_HOST` nur Log. **Rechtstexte**: `/impressum`, `/datenschutz`, `/agb`,
   `/widerruf`, Betreiberdaten aus `OPERATOR_*` (fehlende werden rot markiert). Nutzer muss echte Daten in `.env` eintragen.
-- **Server testen**: `python3 -m unittest discover -s server/tests` (59 Tests, Fake-Forgejo/GitHub/Mailer/Stripe/ntfy/ClamAV, ~35 s).
+- **Server testen**: `python3 -m unittest discover -s server/tests` (64 Tests, Fake-Forgejo/GitHub/Mailer/Stripe/ntfy/ClamAV, ~35 s).
   CLI im Container: `python store_server.py users | set-role NAME ROLLE | reset-password NAME`.
 - **App testen**: `./gradlew assembleDebug testDebugUnitTest` (Versionsvergleich + `ApiContractTest` mit echten
   Server-Antworten aus `app/src/test/resources/api-samples.json`; bei API-Änderungen neu erzeugen).
@@ -32,6 +32,10 @@
 - **Web**: Startseite/Katalog/App-Seiten/Kontakt in `storefront.py` (serverseitig), Aktionen auf App-Seiten per
   `web/store.js`, komplette Web-App (Konto, Käufe, Nachrichten, Entwickler, Admin) in `web/app.html` unter `/konto`
   (Hash-Routing, Token in `localStorage` `bd_token`), Doku in `docs.py` unter `/hilfe`. `/portal` leitet auf `/konto` um.
+- **Icons & Versionen**: App-Icon wird automatisch aus der APK gelesen (`apk_icon.py`: resources.arsc → größte Bitmap,
+  sonst adaptive/Vektor-Icon → SVG; `apps.icon_auto`, hochgeladenes Icon hat Vorrang). App lädt SVG über `coil-svg`.
+  Tags mit Präfix (`android-v1.0.24`) → Version `1.0.24` (Server `normalize_version`, App `Versions.normalize`, JS `ver()`).
+  Web und App im Play-Store-Stil (Reihen, Top-Charts, Kennzahlen-Zeile).
 - **Nachrichten**: `threads`/`messages` (gelesen über `user_read_id`/`dev_read_id`), Kontaktformular `contact_messages`.
 - **Releases**: `.github/workflows/release.yml` bzw. `.forgejo/workflows/release.yml` bauen bei veröffentlichtem
   Release eine signierte APK (Keystore aus Secrets), Version per `scripts/version-from-tag.sh`, Upload in den Store.

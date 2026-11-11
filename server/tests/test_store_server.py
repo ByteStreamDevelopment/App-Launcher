@@ -764,7 +764,8 @@ class HelperTest(unittest.TestCase):
 
     def test_apk_info(self):
         info = apk_info.parse_manifest(axml_manifest("com.x.y", "2.5.0", 42))
-        self.assertEqual(info, {"package": "com.x.y", "version_name": "2.5.0", "version_code": 42})
+        self.assertEqual(info, {"package": "com.x.y", "version_name": "2.5.0", "version_code": 42, "icon": None,
+                                "round_icon": None})
         with self.assertRaises(apk_info.ApkError):
             apk_info.parse_manifest(b"<manifest/>")
 

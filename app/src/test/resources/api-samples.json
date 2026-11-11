@@ -11,7 +11,7 @@
     "status": "open",
     "role": "user",
     "with": "Entwickler",
-    "updated_at": 1794179090,
+    "updated_at": 1794413597,
     "unread": true,
     "preview": "Schau ich mir an"
    }
@@ -30,7 +30,7 @@
   "device": "Pixel 7",
   "user": "bert",
   "developer": "anna",
-  "created_at": 1794179090,
+  "created_at": 1794413597,
   "messages": [
    {
     "id": 1,
@@ -38,7 +38,7 @@
     "from_dev": false,
     "mine": false,
     "body": "Hilfe",
-    "created_at": 1794179090
+    "created_at": 1794413597
    },
    {
     "id": 2,
@@ -46,7 +46,7 @@
     "from_dev": true,
     "mine": true,
     "body": "Schau ich mir an",
-    "created_at": 1794179090
+    "created_at": 1794413597
    }
   ]
  },
@@ -95,7 +95,10 @@
      "average": 0,
      "count": 0
     },
-    "screenshots": []
+    "screenshots": [],
+    "downloads": 0,
+    "downloads_label": "Neu",
+    "version": "1.0"
    },
    {
     "id": "Manhunt/manhunt",
@@ -140,7 +143,10 @@
      "average": 0,
      "count": 0
     },
-    "screenshots": []
+    "screenshots": [],
+    "downloads": 0,
+    "downloads_label": "Neu",
+    "version": "2.5.0"
    },
    {
     "id": "anna/spiel",
@@ -156,7 +162,7 @@
      "tag": "1.1.0-beta",
      "name": "1.1.0-beta",
      "notes": "",
-     "published_at": "2026-11-08T23:04:50Z",
+     "published_at": "2026-11-11T16:13:17Z",
      "html_url": "",
      "channel": "beta"
     },
@@ -187,7 +193,10 @@
     },
     "screenshots": [
      "https://store.test/api/apps/anna/spiel/screenshots/1"
-    ]
+    ],
+    "downloads": 1,
+    "downloads_label": "1+",
+    "version": "1.1.0-beta"
    }
   ],
   "user": {
@@ -235,7 +244,7 @@
   "codes_used": 0,
   "testers": 1,
   "unlocked_users": 1,
-  "created_at": 1794179090,
+  "created_at": 1794413597,
   "pending_versions": [],
   "blocked_versions": [],
   "screenshots": [
@@ -274,7 +283,7 @@
     "amount_cents": 199,
     "price": "1,99 €",
     "status": "paid",
-    "created_at": 1794179090,
+    "created_at": 1794413597,
     "withdrawn_at": null,
     "can_withdraw": true
    }
@@ -294,7 +303,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794179090,
+    "created_at": 1794413597,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -312,7 +321,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794179090,
+    "created_at": 1794413597,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 1,
@@ -330,7 +339,7 @@
     "notify_updates": true,
     "notify_news": false,
     "ntfy_topic": "",
-    "created_at": 1794179090,
+    "created_at": 1794413597,
     "dev_note": "",
     "dev_requested_at": null,
     "apps": 0,
@@ -384,8 +393,8 @@
     "rating": 4,
     "text": "Gut",
     "version": "1.1.0-beta",
-    "created_at": 1794179090,
-    "updated_at": 1794179090,
+    "created_at": 1794413597,
+    "updated_at": 1794413597,
     "reply": "",
     "reply_at": null,
     "mine": true
@@ -399,8 +408,8 @@
    "rating": 4,
    "text": "Gut",
    "version": "1.1.0-beta",
-   "created_at": 1794179090,
-   "updated_at": 1794179090,
+   "created_at": 1794413597,
+   "updated_at": 1794413597,
    "reply": "",
    "reply_at": null,
    "mine": true

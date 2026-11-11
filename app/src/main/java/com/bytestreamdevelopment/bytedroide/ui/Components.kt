@@ -166,7 +166,7 @@ fun statusText(entry: AppEntry, task: Task?): String = when {
     }
 }
 
-fun version(tag: String) = tag.removePrefix("v").removePrefix("V")
+fun version(tag: String) = com.bytestreamdevelopment.bytedroide.data.Versions.normalize(tag)
 
 fun formatDate(iso: String): String = runCatching {
     OffsetDateTime.parse(iso).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -74,18 +76,50 @@ fun DetailScreen(entry: AppEntry?, task: Task?, state: UiState, vm: StoreViewMod
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AppIcon(entry, 80.dp)
-                Spacer(Modifier.width(16.dp))
+                AppIcon(entry, 76.dp)
+                Spacer(Modifier.width(18.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(app.name, style = MaterialTheme.typography.headlineSmall)
-                    Text(app.owner, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                    Text(statusText(entry, task), style = MaterialTheme.typography.labelMedium)
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        AppBadges(app)
-                        if (app.category.isNotBlank()) Badge(app.category, MaterialTheme.colorScheme.primary)
+                    Text(app.owner, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    val sub = listOfNotNull(
+                        app.category.ifBlank { null },
+                        if (app.beta.available) "Beta verfügbar" else null,
+                    ).joinToString(" · ")
+                    if (sub.isNotBlank()) {
+                        Text(sub, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) { AppBadges(app) }
+                }
+            }
+
+            // Kennzahlen wie im Play Store: Bewertung | Downloads | Größe | Preis
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                val stats = listOf(
+                    (if (app.ratingCount > 0) "%.1f ★".format(app.ratingAverage) else "–") to
+                        (if (app.ratingCount > 0) "${app.ratingCount} Bewertung${if (app.ratingCount != 1) "en" else ""}"
+                        else "Keine Bewertungen"),
+                    app.downloadsLabel.ifBlank { "Neu" } to "Downloads",
+                    Formatter.formatShortFileSize(context, app.release.apk.size) to "Größe",
+                    (if (app.isPaid) app.price else if (app.access == com.bytestreamdevelopment.bytedroide.data.Access.Code) "🔒 Code" else "Kostenlos") to "Preis",
+                )
+                stats.forEachIndexed { i, (value, label) ->
+                    if (i > 0) VerticalDivider(Modifier.height(28.dp))
+                    Column(
+                        Modifier.padding(horizontal = 14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(value, style = MaterialTheme.typography.titleSmall)
+                        Text(label, style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
+            Text(statusText(entry, task), style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 ActionButton(entry, task, vm, Modifier.weight(1f))
@@ -102,20 +136,13 @@ fun DetailScreen(entry: AppEntry?, task: Task?, state: UiState, vm: StoreViewMod
                 TextButton(onClick = { vm.requestRedeem(app.fullName) }) { Text("Ich habe einen Gutschein-Code") }
             }
 
-            if (app.ratingCount > 0) {
-                Text(
-                    "${stars(app.ratingAverage)}  %.1f · %d Bewertung%s".format(
-                        app.ratingAverage, app.ratingCount, if (app.ratingCount != 1) "en" else "",
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
             ScreenshotGallery(app.screenshots)
 
             if (app.description.isNotBlank()) {
-                Text(app.description, style = MaterialTheme.typography.bodyLarge)
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("Über diese App", style = MaterialTheme.typography.titleLarge)
+                    Text(app.description, style = MaterialTheme.typography.bodyMedium)
+                }
             }
 
             BetaCard(entry, state, vm)

@@ -37,7 +37,7 @@ zurückgestuft noch gelöscht werden.
 - APK hochladen: Paketname, `versionName` und `versionCode` werden aus der APK gelesen und geprüft
   (falsche App, falsche Version oder nicht steigender `versionCode` werden abgelehnt)
 - Kanäle **Stabil** und **Beta** (bei Quellen: Pre-Releases = Beta); Beta-Programm offen oder nur auf Einladung
-- Freigabe: offen / nur mit Code / versteckt; **Preis** (0,50 €–1000 €); Icon, Kategorie, Webseite
+- Freigabe: offen / nur mit Code / versteckt; **Preis** (0,50 €–1000 €); Icon (wird automatisch aus der APK gelesen, eigenes Icon hat Vorrang), Kategorie, Webseite
 - Freischalt-Codes (wirken bei Kauf-Apps als Gutschein), Beta-Tester einladen
 - Statistik: Downloads, 30 Tage, Verkäufe, Umsatz
 - **API-Schlüssel** für automatische Uploads aus CI
